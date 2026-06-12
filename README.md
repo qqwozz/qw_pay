@@ -258,3 +258,4 @@ MIT License — см. файл [LICENSE](LICENSE).
 - [ ] Kubernetes (Helm-чарты)
 - [ ] Мониторинг (Prometheus + Grafana)
 - [ ] Логирование (ELK)
+# QW Pay - Payment Processing System
