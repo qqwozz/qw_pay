@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QW Pay — Платформа</title>
+<style>
+:root {
+  --bg: #0a0e1a; --surface: #111827; --surface2: #1a2236; --border: #1e293b;
+  --text: #e2e8f0; --muted: #64748b; --accent: #6366f1; --accent2: #818cf8;
+  --green: #22c55e; --red: #ef4444; --amber: #f59e0b; --cyan: #06b6d4;
+  --radius: 14px; --shadow: 0 4px 24px rgba(0,0,0,.4);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+.topbar { background:linear-gradient(135deg,#4f46e5,#7c3aed,#a855f7); padding:1rem 2rem; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 20px rgba(99,102,241,.3); }
+.topbar h1 { font-size:1.5rem; letter-spacing:-.02em; }
+.topbar .subtitle { opacity:.75; font-size:.85rem; }
+.topbar .status-pill { background:rgba(255,255,255,.15); padding:.35rem .8rem; border-radius:20px; font-size:.75rem; backdrop-filter:blur(4px); }
+
+.layout { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; padding:1.5rem; max-width:1200px; margin:0 auto; }
+@media(max-width:800px){ .layout{grid-template-columns:1fr;} }
+
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; box-shadow:var(--shadow); transition:border-color .2s; }
+.card:hover { border-color:var(--accent); }
+.card.full { grid-column:1/-1; }
+.card-title { font-size:.95rem; font-weight:700; color:var(--accent2); margin-bottom:.85rem; display:flex; align-items:center; gap:.5rem; }
+.card-title .icon { font-size:1.1rem; }
+
+label { display:block; font-size:.75rem; color:var(--muted); margin-bottom:.2rem; margin-top:.6rem; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+input,select { width:100%; padding:.55rem .75rem; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:.85rem; transition:border .15s; }
+input:focus,select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(99,102,241,.15); }
+select option { background:var(--surface); }
+
+.row { display:flex; gap:.6rem; flex-wrap:wrap; }
+.row>* { flex:1; min-width:120px; }
+
+.btn { display:inline-flex; align-items:center; gap:.4rem; padding:.55rem 1rem; border-radius:10px; border:none; font-size:.8rem; font-weight:600; cursor:pointer; transition:all .15s; margin-top:.65rem; }
+.btn:active { transform:scale(.97); }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:var(--accent2); }
+.btn-success { background:var(--green); color:#000; }
+.btn-success:hover { background:#16a34a; color:#fff; }
+.btn-amber { background:var(--amber); color:#000; }
+.btn-amber:hover { background:#d97706; }
+.btn-red { background:var(--red); color:#fff; }
+.btn-red:hover { background:#dc2626; }
+.btn-cyan { background:var(--cyan); color:#000; }
+.btn-cyan:hover { background:#0891b2; color:#fff; }
+.btn-sm { padding:.4rem .7rem; font-size:.75rem; margin-top:.4rem; }
+
+.badge { display:inline-block; padding:.15rem .5rem; border-radius:6px; font-size:.7rem; font-weight:700; }
+.badge-green { background:rgba(34,197,94,.15); color:var(--green); }
+.badge-amber { background:rgba(245,158,11,.15); color:var(--amber); }
+.badge-red { background:rgba(239,68,68,.15); color:var(--red); }
+.badge-cyan { background:rgba(6,182,212,.15); color:var(--cyan); }
+
+pre { margin-top:.6rem; background:var(--bg); padding:.7rem; border-radius:10px; font-size:.72rem; overflow-x:auto; border:1px solid var(--border); white-space:pre-wrap; max-height:250px; overflow-y:auto; font-family:'JetBrains Mono','Fira Code',monospace; line-height:1.5; }
+pre .key { color:var(--cyan); }
+pre .str { color:var(--green); }
+pre .num { color:var(--amber); }
+pre .err { color:var(--red); }
+
+.token-box { margin-top:.5rem; padding:.5rem .7rem; background:var(--bg); border:1px solid var(--border); border-radius:8px; font-size:.7rem; word-break:break-all; font-family:monospace; color:var(--accent2); }
+
+.step-num { display:inline-flex; align-items:center; justify-content:center; width:1.6rem; height:1.6rem; border-radius:50%; background:var(--accent); color:#fff; font-size:.75rem; font-weight:800; flex-shrink:0; }
+
+.empty { color:var(--muted); font-size:.8rem; font-style:italic; text-align:center; padding:1.5rem; }
+
+.toast { position:fixed; bottom:1.5rem; right:1.5rem; padding:.7rem 1.2rem; border-radius:10px; font-size:.8rem; font-weight:600; z-index:999; animation:slideIn .3s ease; pointer-events:none; }
+@keyframes slideIn { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+.toast-ok { background:var(--green); color:#000; }
+.toast-err { background:var(--red); color:#fff; }
+
+.spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; margin-right:.4rem; vertical-align:middle; }
+@keyframes spin { to{transform:rotate(360deg)} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>QW Pay</h1>
+    <div class="subtitle">Платёжная система — Демо</div>
+  </div>
+  <div class="status-pill" id="connStatus">● Подключение…</div>
+</div>
+
+<div class="layout">
+
+  <!-- 1. Register -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">1</span> Регистрация</div>
+    <label>Email</label>
+    <input id="reg-email" value="demo@qwpay.io" placeholder="user@example.com">
+    <div class="row">
+      <div><label>Телефон</label><input id="reg-phone" value="+79001234567"></div>
+      <div><label>Пароль</label><input id="reg-pass" type="password" value="secret123"></div>
+    </div>
+    <button class="btn btn-primary" onclick="doRegister()">Зарегистрироваться</button>
+    <pre id="reg-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
+  <!-- 2. OTP -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">2</span> Подтверждение OTP</div>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;">Код выводится в логах сервера (logs/server.log)</p>
+    <label>OTP-код</label>
+    <input id="otp-code" placeholder="000000" maxlength="6" style="letter-spacing:.3em;text-align:center;font-size:1.3rem;">
+    <button class="btn btn-amber" onclick="doVerify()">Подтвердить аккаунт</button>
+    <pre id="otp-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
+  <!-- 3. Login -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">3</span> Авторизация</div>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;">Email и пароль из шага 1</p>
+    <button class="btn btn-success" onclick="doLogin()">Войти в систему</button>
+    <div id="token-section" style="display:none;margin-top:.6rem;">
+      <span class="badge badge-green">Авторизован</span>
+      <div class="token-box" id="token-val"></div>
+    </div>
+    <pre id="login-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
+  <!-- 4. Accounts -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">4</span> Управление счетами</div>
+    <div class="row">
+      <div style="flex:2"><label>Валюта</label>
+        <select id="acc-currency">
+          <option value="USD">USD — Доллар США</option>
+          <option value="RUB">RUB — Российский рубль</option>
+          <option value="EUR">EUR —Евро</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:.4rem;">
+        <button class="btn btn-primary" onclick="doCreateAccount()">Открыть счёт</button>
+      </div>
+    </div>
+    <p style="font-size:.75rem;color:var(--green);margin-top:.5rem;">+100 ед. валюты бонус при открытии</p>
+    <button class="btn btn-cyan btn-sm" onclick="doListAccounts()">Обновить список</button>
+    <pre id="acc-out"><span class="empty">Нажмите «Обновить список»…</span></pre>
+  </div>
+
+  <!-- 5. Transfer -->
+  <div class="card full">
+    <div class="card-title"><span class="step-num">5</span> Перевод между счетами</div>
+    <div class="row">
+      <div><label>Счёт отправителя (ID)</label><input id="tx-from" placeholder="UUID"></div>
+      <div><label>Счёт получателя (ID)</label><input id="tx-to" placeholder="UUID"></div>
+      <div><label>Сумма</label><input id="tx-amount" type="number" value="10" min="0.01" step="0.01"></div>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+      <button class="btn btn-primary" onclick="doTransfer()">Перевести</button>
+      <button class="btn btn-cyan btn-sm" onclick="doListTransactions()">История переводов</button>
+    </div>
+    <pre id="tx-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
+  <!-- 6. Block account -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">6</span> Блокировка счёта</div>
+    <label>ID счёта</label>
+    <input id="block-id" placeholder="UUID счёта">
+    <button class="btn btn-red" onclick="doBlockAccount()">Заблокировать</button>
+    <pre id="block-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
+  <!-- 7. Transactions -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">7</span> История операций</div>
+    <button class="btn btn-cyan" onclick="doListTransactions()">Загрузить историю</button>
+    <pre id="tx-history"><span class="empty">Нажмите «Загрузить историю»…</span></pre>
+  </div>
+
+  <!-- 8. Raw request -->
+  <div class="card full">
+    <div class="card-title"><span class="step-num">8</span> Консоль — HTTP-запросы</div>
+    <div class="row">
+      <div style="flex:1"><label>Метод</label>
+        <select id="raw-method">
+          <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+        </select>
+      </div>
+      <div style="flex:4"><label>Путь</label><input id="raw-path" value="/api/v1/accounts"></div>
+    </div>
+    <label>Тело запроса (JSON)</label>
+    <input id="raw-body" placeholder='{"currency":"USD"}'>
+    <button class="btn btn-primary" onclick="doRawRequest()">Отправить</button>
+    <pre id="raw-out"><span class="empty">Ответ сервера…</span></pre>
+  </div>
+
+</div>
+
+<script>
+const API = '/api/v1';
+let token = '';
+
+function headers() {
+  const h = {'Content-Type':'application/json'};
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
+
+async function req(method, path, body) {
+  const opts = { method, headers: headers() };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  const start = performance.now();
+  const r = await fetch(API + path, opts);
+  const ms = (performance.now() - start).toFixed(0);
+  const data = await r.json().catch(() => ({}));
+  return { status: r.status, data, ms };
+}
+
+function fmt(json) {
+  return JSON.stringify(json, null, 2);
+}
+
+function show(id, result, ok) {
+  const el = document.getElementById(id);
+  const cls = result.status >= 200 && result.status < 300 ? 'str' : 'err';
+  el.innerHTML = `<span class="${cls}">← HTTP ${result.status} (${result.ms}ms)</span>\n` + fmt(result.data);
+}
+
+function toast(msg, ok) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (ok ? 'toast-ok' : 'toast-err');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+async function checkConn() {
+  try {
+    const r = await fetch('/demo', {method:'HEAD'});
+    document.getElementById('connStatus').textContent = '● Сервер работает';
+    document.getElementById('connStatus').style.color = '#86efac';
+  } catch(e) {
+    document.getElementById('connStatus').textContent = '● Нет соединения';
+    document.getElementById('connStatus').style.color = '#fca5a5';
+  }
+}
+
+async function doRegister() {
+  const r = await req('POST', '/register', {
+    email: document.getElementById('reg-email').value,
+    phone: document.getElementById('reg-phone').value,
+    password: document.getElementById('reg-pass').value
+  });
+  show('reg-out', r);
+  toast(r.status === 200 ? 'Регистрация успешна' : 'Ошибка регистрации', r.status === 200);
+}
+
+async function doVerify() {
+  const r = await req('POST', '/verify', {
+    email: document.getElementById('reg-email').value,
+    otp_code: document.getElementById('otp-code').value
+  });
+  show('otp-out', r);
+  toast(r.status === 200 ? 'Аккаунт подтверждён' : 'OTP неверен', r.status === 200);
+}
+
+async function doLogin() {
+  const r = await req('POST', '/login', {
+    email: document.getElementById('reg-email').value,
+    password: document.getElementById('reg-pass').value
+  });
+  show('login-out', r);
+  if (r.data.access_token) {
+    token = r.data.access_token;
+    document.getElementById('token-section').style.display = 'block';
+    document.getElementById('token-val').textContent = token;
+    toast('Вход выполнен', true);
+  } else {
+    toast('Ошибка входа', false);
+  }
+}
+
+async function doCreateAccount() {
+  const r = await req('POST', '/accounts', {
+    currency: document.getElementById('acc-currency').value
+  });
+  show('acc-out', r);
+  toast(r.status === 200 ? 'Счёт открыт! +100 бонус' : 'Ошибка', r.status === 200);
+}
+
+async function doListAccounts() {
+  const r = await req('GET', '/accounts');
+  show('acc-out', r);
+  if (Array.isArray(r.data)) {
+    r.data.forEach(a => {
+      const fromEl = document.getElementById('tx-from');
+      const toEl = document.getElementById('tx-to');
+      if (!fromEl.value) fromEl.value = a.id;
+    });
+  }
+}
+
+async function doTransfer() {
+  const r = await req('POST', '/transactions', {
+    from_account_id: document.getElementById('tx-from').value,
+    to_account_id: document.getElementById('tx-to').value,
+    amount: parseFloat(document.getElementById('tx-amount').value),
+    idempotency_key: crypto.randomUUID()
+  });
+  show('tx-out', r);
+  toast(r.status === 200 ? 'Перевод выполнен' : 'Ошибка перевода', r.status === 200);
+}
+
+async function doListTransactions() {
+  const r = await req('GET', '/transactions');
+  const el = document.getElementById('tx-history');
+  if (r.data.transactions && r.data.transactions.length > 0) {
+    el.innerHTML = `<span class="str">← HTTP ${r.status} (${r.data.total} записей)</span>\n` + fmt(r.data);
+  } else {
+    el.innerHTML = `<span class="empty">Пока нет операций</span>`;
+  }
+}
+
+async function doBlockAccount() {
+  const id = document.getElementById('block-id').value;
+  if (!id) { toast('Введите ID счёта', false); return; }
+  const r = await req('POST', '/accounts/' + id + '/block');
+  show('block-out', r);
+  toast(r.status === 200 ? 'Счёт заблокирован' : 'Ошибка блокировки', r.status === 200);
+}
+
+async function doRawRequest() {
+  const method = document.getElementById('raw-method').value;
+  const path = document.getElementById('raw-path').value;
+  const bodyStr = document.getElementById('raw-body').value;
+  let body;
+  try { body = bodyStr ? JSON.parse(bodyStr) : null; } catch(e) { toast('Невалидный JSON', false); return; }
+  const r = await req(method, path, body);
+  show('raw-out', r);
+}
+
+checkConn();
+setInterval(checkConn, 15000);
+</script>
+</body>
+</html>
