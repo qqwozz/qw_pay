@@ -5,6 +5,7 @@
 *.so
 *.dylib
 /server
+/fraud_engine
 
 # Test binary
 *.test
@@ -43,5 +44,8 @@ docker-compose.override.yml
 *.log
 logs/
 
-# tmp
+# Temp
 tmp/
+
+# Build artifacts
+antifraud/cpp/fraud_engine

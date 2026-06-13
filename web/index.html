@@ -146,7 +146,7 @@ pre .err { color:var(--red); }
 
   <!-- 5. Transfer -->
   <div class="card full">
-    <div class="card-title"><span class="step-num">5</span> Перевод между счетами</div>
+    <div class="card-title"><span class="step-num">5</span> Перевод между счетами <span class="badge badge-cyan" style="margin-left:.5rem;">Anti-Fraud: C++ + Python</span></div>
     <div class="row">
       <div><label>Счёт отправителя (ID)</label><input id="tx-from" placeholder="UUID"></div>
       <div><label>Счёт получателя (ID)</label><input id="tx-to" placeholder="UUID"></div>
@@ -159,25 +159,42 @@ pre .err { color:var(--red); }
     <pre id="tx-out"><span class="empty">Результат появится здесь…</span></pre>
   </div>
 
-  <!-- 6. Block account -->
+  <!-- 6. Anti-Fraud Monitor -->
   <div class="card">
-    <div class="card-title"><span class="step-num">6</span> Блокировка счёта</div>
+    <div class="card-title"><span class="step-num">6</span> Anti-Fraud монитор</div>
+    <p style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem;">C++: velocity, лимиты, блэклисты | Python: паттерны, scoring</p>
+    <button class="btn btn-amber btn-sm" onclick="doBlockUser()">Заблокировать юзера</button>
+    <div style="margin-top:.4rem;">
+      <label>ID пользователя</label>
+      <input id="fraud-block-user" placeholder="UUID пользователя">
+    </div>
+    <div style="margin-top:.6rem;">
+      <button class="btn btn-red btn-sm" onclick="doBlockAccountAF()">Заблокировать счёт (AF)</button>
+      <label>ID счёта</label>
+      <input id="fraud-block-acc" placeholder="UUID счёта">
+    </div>
+    <pre id="af-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
+  <!-- 7. Block account -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">7</span> Блокировка счёта (БД)</div>
     <label>ID счёта</label>
     <input id="block-id" placeholder="UUID счёта">
     <button class="btn btn-red" onclick="doBlockAccount()">Заблокировать</button>
     <pre id="block-out"><span class="empty">Результат появится здесь…</span></pre>
   </div>
 
-  <!-- 7. Transactions -->
+  <!-- 8. Transactions -->
   <div class="card">
-    <div class="card-title"><span class="step-num">7</span> История операций</div>
+    <div class="card-title"><span class="step-num">8</span> История операций</div>
     <button class="btn btn-cyan" onclick="doListTransactions()">Загрузить историю</button>
     <pre id="tx-history"><span class="empty">Нажмите «Загрузить историю»…</span></pre>
   </div>
 
-  <!-- 8. Raw request -->
+  <!-- 9. Raw request -->
   <div class="card full">
-    <div class="card-title"><span class="step-num">8</span> Консоль — HTTP-запросы</div>
+    <div class="card-title"><span class="step-num">9</span> Консоль — HTTP-запросы</div>
     <div class="row">
       <div style="flex:1"><label>Метод</label>
         <select id="raw-method">
@@ -335,6 +352,22 @@ async function doRawRequest() {
   try { body = bodyStr ? JSON.parse(bodyStr) : null; } catch(e) { toast('Невалидный JSON', false); return; }
   const r = await req(method, path, body);
   show('raw-out', r);
+}
+
+async function doBlockUser() {
+  const id = document.getElementById('fraud-block-user').value;
+  if (!id) { toast('Введите ID пользователя', false); return; }
+  const r = await req('POST', '/antifraud/block-user', { user_id: id });
+  show('af-out', r);
+  toast(r.status === 200 ? 'Пользователь заблокирован в AF' : 'Ошибка', r.status === 200);
+}
+
+async function doBlockAccountAF() {
+  const id = document.getElementById('fraud-block-acc').value;
+  if (!id) { toast('Введите ID счёта', false); return; }
+  const r = await req('POST', '/antifraud/block-account', { account_id: id });
+  show('af-out', r);
+  toast(r.status === 200 ? 'Счёт заблокирован в AF' : 'Ошибка', r.status === 200);
 }
 
 checkConn();

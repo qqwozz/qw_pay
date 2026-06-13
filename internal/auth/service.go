@@ -1,0 +1,123 @@
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+
+	"github.com/qw_pay/internal/config"
+	"github.com/qw_pay/internal/model"
+)
+
+type otpEntry struct {
+	code      string
+	createdAt time.Time
+}
+
+type Service struct {
+	repo *UserRepository
+	mu   sync.RWMutex
+	otp  map[string]*otpEntry
+}
+
+func NewService(repo *UserRepository) *Service {
+	return &Service{repo: repo, otp: make(map[string]*otpEntry)}
+}
+
+func (s *Service) Register(ctx context.Context, email, phone, password string) (*model.User, error) {
+	exists, err := s.repo.ExistsByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, fmt.Errorf("email already registered")
+	}
+
+	hash, err := HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.repo.Create(ctx, email, phone, hash)
+}
+
+func (s *Service) GenerateOTP() string {
+	code := ""
+	for i := 0; i < 6; i++ {
+		n, _ := rand.Int(rand.Reader, big.NewInt(10))
+		code += fmt.Sprintf("%d", n.Int64())
+	}
+	return code
+}
+
+func (s *Service) StoreOTP(email, code string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.otp[email] = &otpEntry{code: code, createdAt: time.Now()}
+}
+
+func (s *Service) VerifyOTP(email, code string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.otp[email]
+	if !ok {
+		return false
+	}
+	if time.Since(entry.createdAt) > time.Duration(config.C.OTPTTLSeconds)*time.Second {
+		delete(s.otp, email)
+		return false
+	}
+	if entry.code != code {
+		return false
+	}
+	delete(s.otp, email)
+	return true
+}
+
+func (s *Service) Authenticate(ctx context.Context, email, password string) (*model.User, error) {
+	user, err := s.repo.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	if err := CheckPassword(user.PasswordHash, password); err != nil {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	return user, nil
+}
+
+func (s *Service) VerifyUser(ctx context.Context, email string) error {
+	return s.repo.SetVerified(ctx, email)
+}
+
+func (s *Service) CreateToken(userID uuid.UUID) (string, error) {
+	claims := jwt.MapClaims{
+		"sub": userID.String(),
+		"exp": time.Now().Add(time.Duration(config.C.JWTExpireHours) * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(config.C.JWTSecret))
+}
+
+func (s *Service) DecodeToken(tokenStr string) (uuid.UUID, error) {
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		return []byte(config.C.JWTSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return uuid.Nil, fmt.Errorf("invalid token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("invalid claims")
+	}
+	sub, ok := claims["sub"].(string)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("invalid subject")
+	}
+	return uuid.Parse(sub)
+}
