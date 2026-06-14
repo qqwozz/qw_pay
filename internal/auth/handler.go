@@ -5,14 +5,17 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/qw_pay/internal/audit"
 )
 
 type Handler struct {
-	svc *Service
+	svc   *Service
+	audit *audit.Service
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, audit: auditSvc}
 }
 
 type registerReq struct {
@@ -42,6 +45,9 @@ func (h *Handler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), &user.ID, "USER_REGISTERED", "user", user.ID, c.ClientIP())
+	}
 	otp := h.svc.GenerateOTP()
 	h.svc.StoreOTP(req.Email, otp)
 	log.Printf("OTP for %s: %s", req.Email, otp)
@@ -65,6 +71,11 @@ func (h *Handler) VerifyOTP(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if h.audit != nil {
+		if user, err := h.svc.GetUserByEmail(c.Request.Context(), req.Email); err == nil {
+			h.audit.Log(c.Request.Context(), &user.ID, "USER_VERIFIED", "user", user.ID, c.ClientIP())
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Account verified"})
 }
 
@@ -83,7 +94,7 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Account not verified"})
 		return
 	}
-	token, err := h.svc.CreateToken(user.ID)
+	token, err := h.svc.CreateToken(user.ID, string(user.Role))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create token"})
 		return
@@ -92,5 +103,6 @@ func (h *Handler) Login(c *gin.Context) {
 		"access_token": token,
 		"token_type":   "bearer",
 		"user_id":      user.ID,
+		"role":         user.Role,
 	})
 }

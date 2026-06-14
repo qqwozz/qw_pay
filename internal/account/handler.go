@@ -5,14 +5,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/qw_pay/internal/audit"
 )
 
 type Handler struct {
-	svc *Service
+	svc   *Service
+	audit *audit.Service
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, audit: auditSvc}
 }
 
 type createReq struct {
@@ -30,6 +33,9 @@ func (h *Handler) Create(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), &userID, "ACCOUNT_CREATED", "account", acc.ID, c.ClientIP())
 	}
 	c.JSON(http.StatusOK, acc)
 }
@@ -64,5 +70,38 @@ func (h *Handler) Block(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), &userID, "ACCOUNT_BLOCKED", "account", accountID, c.ClientIP())
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Account blocked"})
+}
+
+func (h *Handler) AdminBlock(c *gin.Context) {
+	var req struct {
+		AccountID string `json:"account_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	accountID, err := uuid.Parse(req.AccountID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
+		return
+	}
+	acc, err := h.svc.GetByID(c.Request.Context(), accountID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Account not found"})
+		return
+	}
+	if err := h.svc.Block(c.Request.Context(), accountID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	adminID := c.MustGet("user_id").(uuid.UUID)
+	if h.audit != nil {
+		h.audit.LogWithValue(c.Request.Context(), &adminID, "ACCOUNT_BLOCKED", "account", accountID, c.ClientIP(),
+			map[string]string{"status": string(acc.Status)}, map[string]string{"status": "BLOCKED"})
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Account blocked by admin"})
 }

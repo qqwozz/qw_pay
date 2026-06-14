@@ -1,141 +1,238 @@
-# Архитектура
+# Architecture
 
-## Обзор
+## Overview
 
-QW Pay построен по принципу чистой архитектуры с разделением на сервисы. Каждый сервис имеет три слоя: Handler → Service → Repository.
-
----
-
-## Микросервисная структура
-
-### Go сервисы
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      API Gateway                            │
-│                  (cmd/server/main.go)                       │
-│              Роутинг, JWT, инициализация                    │
-└───────────┬──────────────┬───────────────┬─────────────────┘
-            │              │               │
-    ┌───────▼──────┐ ┌────▼─────┐ ┌───────▼──────┐
-    │  Auth        │ │ Account  │ │ Transaction  │
-    │  Service     │ │ Service  │ │   Service    │
-    └───────┬──────┘ └────┬─────┘ └───────┬──────┘
-            │              │               │
-            └──────────────┼───────────────┘
-                           │
-                ┌──────────▼──────────┐
-                │     PostgreSQL      │
-                └─────────────────────┘
-```
-
-### Антифрод (внешние сервисы)
-
-```
-┌─────────────────┐
-│  Go Backend     │
-│  (Transaction)  │
-└────────┬────────┘
-         │ Redis Queue
-    ┌────▼────┐
-    │  Redis  │
-    └────┬────┘
-    ┌────┴────────────────┐
-    │                     │
-┌───▼────────┐   ┌───────▼──────┐
-│ C++ Engine │   │ Python Engine│
-│ (fast)     │   │ (deep)       │
-└────────────┘   └──────────────┘
-```
+QW Pay follows clean architecture principles with strict layer separation: **Handler → Service → Repository**. Each feature module (auth, account, transaction, currency, audit) is self-contained with dependency injection via constructors.
 
 ---
 
-## Слои архитектуры
+## System Architecture
 
-### Handler (HTTP)
+```mermaid
+graph TB
+    subgraph Clients
+        Web["Web Demo"]
+        API["API Client"]
+    end
 
-Отвечает за:
-- Валидацию входящих запросов
-- Маршрутизацию
-- Формирование HTTP-ответов
+    subgraph Go["Go Backend (cmd/server)"]
+        MW["Middleware<br/>JWT + AdminRequired"]
+        Router["Gin Router"]
 
-### Service (Бизнес-логика)
+        subgraph Services
+            AuthSvc["Auth Service"]
+            AccSvc["Account Service"]
+            TxCsv["Transaction Service"]
+            CurSvc["Currency Service"]
+            AuditSvc["Audit Service"]
+        end
 
-Отвечает за:
-- Бизнес-правила
-- Оркестрацию операций
-- Логирование
+        subgraph Repositories
+            AuthRepo["UserRepository"]
+            AccRepo["AccountRepository"]
+            TxRepo["TransactionRepository"]
+            CurRepo["CurrencyRepository"]
+            AuditRepo["AuditRepository"]
+        end
+    end
 
-### Repository (Доступ к данным)
+    subgraph AntiFraud["Anti-Fraud System"]
+        AFClient["Go Client<br/>(Redis Queue)"]
+        CPP["C++ Engine<br/>Velocity, Limits, Blacklists"]
+        PY["Python Engine<br/>ML Scoring, Patterns"]
+    end
 
-Отвечает за:
-- SQL-запросы
-- Работу с транзакциями БД
-- Маппинг моделей
+    subgraph Data["Data Layer"]
+        PG[("PostgreSQL 16")]
+        RD[("Redis 7")]
+    end
 
----
+    Clients --> Router
+    Router --> MW
+    MW --> Services
 
-## Поток перевода
+    AuthSvc --> AuthRepo
+    AccSvc --> AccRepo
+    TxCsv --> TxRepo
+    CurSvc --> CurRepo
+    AuditSvc --> AuditRepo
 
-```
-1. Клиент → POST /api/v1/transactions
-2. Handler проверяет JWT (middleware)
-3. Handler проверяет ownership счёта
-4. Handler отправляет в Redis queue (anti-fraud)
-5. C++ engine проверяет velocity, лимиты, блэклисты
-6. Python engine проверяет паттерны, scoring
-7. Результат → Redis verdict
-8. Go backend получает verdict
-9. Если approved → ACID транзакция:
-   a. BEGIN
-   b. UPDATE accounts (debit) WHERE version = X
-   c. UPDATE accounts (credit) WHERE version = Y
-   d. INSERT INTO transactions
-   e. COMMIT
-10. Клиент ← 200 OK / 403 Forbidden
+    Repositories --> PG
+
+    TxCsv --> AFClient
+    AFClient --> RD
+    RD --> CPP
+    RD --> PY
 ```
 
 ---
 
-## Модели данных
+## Layer Responsibilities
 
-### users
-- `id` (UUID, PK)
-- `email` (VARCHAR, UNIQUE)
-- `phone` (VARCHAR, UNIQUE)
-- `password_hash` (VARCHAR)
-- `role` (ENUM: USER, ADMIN)
-- `is_verified` (BOOLEAN)
-- `created_at`, `updated_at` (TIMESTAMPTZ)
+### Handler (HTTP Layer)
 
-### accounts
-- `id` (UUID, PK)
-- `user_id` (UUID, FK → users)
-- `currency` (ENUM: RUB, USD, EUR)
-- `balance` (NUMERIC(18,2))
-- `version` (INT) — для optimistic locking
-- `status` (ENUM: ACTIVE, BLOCKED)
-- `created_at`, `updated_at` (TIMESTAMPTZ)
+- Validates incoming requests (Gin binding)
+- Extracts user context (user_id, role from JWT)
+- Calls service methods
+- Returns JSON responses with appropriate HTTP status codes
 
-### transactions
-- `id` (UUID, PK)
-- `idempotency_key` (VARCHAR, UNIQUE)
-- `from_account_id` (UUID, FK → accounts)
-- `to_account_id` (UUID, FK → accounts)
-- `amount` (NUMERIC(18,2))
-- `currency` (VARCHAR(3))
-- `source_currency` (VARCHAR(3))
-- `exchange_rate_used` (NUMERIC(18,6))
-- `status` (ENUM: PENDING, EXECUTED, REJECTED)
-- `created_at` (TIMESTAMPTZ)
+### Service (Business Logic)
+
+- Enforces business rules (balance checks, limits, currency validation)
+- Orchestrates multi-step operations (ACID transfers)
+- Manages retry logic (optimistic locking)
+- Writes audit events
+
+### Repository (Data Access)
+
+- Executes SQL queries against PostgreSQL
+- Manages database transactions (BEGIN/COMMIT/ROLLBACK)
+- Maps database rows to Go models
 
 ---
 
-## Паттерны
+## Transaction Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Handler
+    participant AntiFraud
+    participant Service
+    participant DB as PostgreSQL
+
+    Client->>Handler: POST /api/v1/transactions
+
+    rect rgb(30, 41, 59)
+        Note over Handler: Authorization & Ownership
+        Handler->>Handler: Verify JWT token
+        Handler->>Handler: Check account ownership
+    end
+
+    rect rgb(30, 58, 58)
+        Note over Handler, AntiFraud: Anti-Fraud Check
+        Handler->>AntiFraud: Check(from, to, amount, user)
+        AntiFraud->>AntiFraud: C++ velocity + limits
+        AntiFraud->>AntiFraud: Python ML scoring
+        AntiFraud-->>Handler: Verdict
+    end
+
+    alt BLOCKED
+        Handler-->>Client: 403 Forbidden
+    else APPROVED
+        rect rgb(40, 40, 70)
+            Note over Service, DB: ACID Transfer with Optimistic Lock Retry
+            loop Up to 3 retries
+                Service->>DB: BEGIN
+                Service->>DB: Check idempotency_key
+                Service->>DB: INSERT transaction (PENDING → EXECUTED)
+                Service->>DB: UPDATE accounts SET balance = balance - amount<br/>WHERE id = from AND version = X
+                alt Optimistic Lock Conflict
+                    DB-->>Service: RowsAffected = 0
+                    Service->>Service: Re-read accounts
+                    Service->>DB: ROLLBACK
+                else Success
+                    Service->>DB: UPDATE accounts SET balance = balance + amount<br/>WHERE id = to AND version = Y
+                    Service->>DB: COMMIT
+                end
+            end
+        end
+
+        rect rgb(40, 50, 30)
+            Note over Service: Audit Logging
+            Service->>Service: Log TRANSFER_COMPLETED
+        end
+
+        Service-->>Client: 200 OK
+    end
+```
+
+---
+
+## Data Models
+
+```mermaid
+erDiagram
+    users {
+        uuid id PK
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        enum role "USER | ADMIN"
+        boolean is_verified
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    accounts {
+        uuid id PK
+        uuid user_id FK
+        enum currency "RUB | USD | EUR"
+        numeric balance "NUMERIC(18,2)"
+        int version "optimistic lock"
+        enum status "ACTIVE | BLOCKED"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    transactions {
+        uuid id PK
+        varchar idempotency_key UK
+        uuid from_account_id FK
+        uuid to_account_id FK
+        numeric amount "NUMERIC(18,2)"
+        varchar currency
+        varchar source_currency
+        numeric exchange_rate_used
+        numeric converted_amount
+        enum status "PENDING | EXECUTED | REJECTED"
+        timestamptz created_at
+    }
+
+    exchange_rates {
+        serial id PK
+        varchar from_currency
+        varchar to_currency
+        numeric rate
+        varchar source
+    }
+
+    audit_log {
+        uuid id PK
+        uuid user_id FK
+        enum action
+        varchar entity_type
+        uuid entity_id
+        jsonb old_value
+        jsonb new_value
+        varchar ip_address
+        timestamptz created_at
+    }
+
+    fraud_checks {
+        uuid id PK
+        uuid transaction_id FK
+        varchar verdict
+        numeric risk_score
+        jsonb features_json
+        varchar engine
+        timestamptz checked_at
+    }
+
+    users ||--o{ accounts : "has"
+    accounts ||--o{ transactions : "from"
+    accounts ||--o{ transactions : "to"
+    users ||--o{ audit_log : "actions"
+    transactions ||--o| fraud_checks : "checked by"
+```
+
+---
+
+## Concurrency Patterns
 
 ### Optimistic Locking
 
-Каждый счёт имеет поле `version`. При обновлении баланса:
+Every account has a `version` column. On balance updates:
 
 ```sql
 UPDATE accounts
@@ -143,27 +240,25 @@ SET balance = balance - $1, version = version + 1
 WHERE id = $2 AND version = $3 AND status = 'ACTIVE'
 ```
 
-Если `RowsAffected() == 0` → конфликт, повторить.
+If `RowsAffected() == 0` → version mismatch → re-read and retry (up to 3 times).
 
-### Идемпотентность
+### Idempotency
 
-Каждый перевод имеет уникальный `idempotency_key`. При повторном запросе возвращается существующий результат без создания дубликата.
+Each transaction carries a unique `idempotency_key` with a UNIQUE constraint. Duplicate requests return the existing result without creating a new transaction.
 
-### ACID
-
-Все операции списания/зачисления выполняются в одной транзакции БД:
+### ACID Transfers
 
 ```sql
 BEGIN;
-  -- Дебет отправителя
-  UPDATE accounts SET balance = balance - 100, version = version + 1
-  WHERE id = 'from_id' AND version = 1;
+  -- Debit sender (with version check)
+  UPDATE accounts SET balance = balance - $1, version = version + 1
+  WHERE id = $from AND version = $from_version AND status = 'ACTIVE';
 
-  -- Кредит получателя
-  UPDATE accounts SET balance = balance + 100, version = version + 1
-  WHERE id = 'to_id' AND version = 1;
+  -- Credit recipient (with version check)
+  UPDATE accounts SET balance = balance + $1, version = version + 1
+  WHERE id = $to AND version = $to_version AND status = 'ACTIVE';
 
-  -- Запись транзакции
+  -- Record transaction
   INSERT INTO transactions (...) VALUES (...);
 
 COMMIT;
@@ -171,64 +266,76 @@ COMMIT;
 
 ---
 
-## Антифрод
+## Anti-Fraud Architecture
 
-### C++ Engine
+```mermaid
+graph LR
+    TX["Transfer Request"] --> Queue["Redis Queue"]
+    Queue -->|"antifraud:queue"| CPP["C++ Engine<br/>(< 5ms)"]
+    Queue -->|"antifraud:queue:python"| PY["Python Engine<br/>(< 10ms)"]
+    CPP -->|"SET verdict"| RD["Redis"]
+    PY -->|"SET verdict"| RD
+    RD -->|"GET verdict"| Go["Go Backend<br/>(5s timeout)"]
+```
 
-**Задача:** Быстрые проверки (< 5ms)
+### C++ Engine (Real-time)
 
-| Проверка | Лимит | Risk |
-|----------|-------|------|
-| Velocity (мин) | 5 транзакций | +85 |
-| Velocity (час) | 20 транзакций | +80 |
-| Сумма за перевод | 500,000 | +90 |
-| Сумма за день | 2,000,000 | +75 |
-| Блэклист юзера | — | +100 |
-| Блэклист счёта | — | +100 |
-| Круговые переводы | 10 уникальных | +70 |
-| Round amount ≥ 1000 | — | +30 (flag) |
+- Velocity: max 5 transfers/min, 20/hour
+- Amount limits: 500K single, 2M daily
+- Blacklists (users, accounts) from Redis sets
+- Circular transfer detection
+- Round amount detection (structuring)
 
-### Python Engine
+### Python Engine (ML Scoring)
 
-**Задача:** Глубокий анализ и scoring
-
-| Проверка | Risk |
-|----------|------|
-| Аккаунт < 1 часа | +40 |
-| Аккаунт < 24 часов | +15 |
-| Время 2:00-5:00 | +20 |
-| Сумма > 5x от средней | +25 |
-| > 15 уникальных получателей | +30 |
-| Интервал < 10 сек | +35 |
-| Round amount ≥ 10,000 | +20 |
-| > 20 входящих в час | +25 |
-
-**Вердикт:** risk >= 60 → BLOCK, risk < 60 → APPROVE
+- Account age risk (< 1h = +40, < 24h = +15)
+- Unusual hours (2-5am = +20)
+- Amount deviation from average (> 5x = +25)
+- Unique recipient count (> 15 = +30)
+- Rapid succession (< 10s = +35)
+- **Verdict:** risk ≥ 60 → BLOCK
 
 ---
 
-## Инфраструктура
+## Audit Trail
 
-### Docker Compose
+Every significant event is recorded in the immutable `audit_log` table:
+
+| Action | When |
+|--------|------|
+| `USER_REGISTERED` | New user signup |
+| `USER_VERIFIED` | OTP verification |
+| `ACCOUNT_CREATED` | New account opened |
+| `ACCOUNT_BLOCKED` | Account blocked (user or admin) |
+| `TRANSFER_COMPLETED` | Successful transfer |
+| `TRANSFER_BLOCKED_BY_FRAUD` | Anti-fraud rejection |
+
+---
+
+## Infrastructure
+
+### Docker Compose (Development)
 
 ```yaml
 services:
-  db:         PostgreSQL 16
-  redis:      Redis 7
-  app:        Go сервер
-  antifraud-cpp:    C++ движок
-  antifraud-python: Python анализ
+  db:         PostgreSQL 16 (port 5432)
+  redis:      Redis 7 (port 6379)
+  app:        Go server (port 8080)
 ```
 
-### Логирование
+### Docker Compose (Full Stack)
 
-Логи пишутся в:
-- `stdout` (для Docker)
-- `logs/server.log` (для разработки)
+```yaml
+services:
+  db:                 PostgreSQL 16
+  redis:              Redis 7
+  app:                Go server
+  antifraud-cpp:      C++ engine
+  antifraud-python:   Python engine
+```
 
-### Мониторинг
+### Logging
 
-- Статус подключения к PostgreSQL
-- Статус подключения к Redis
-- Антифрод вердикты в логах
-- Время обработки запросов
+- Output to stdout (Docker) + `logs/server.log` (development)
+- Structured format: timestamp, file, line number
+- Anti-fraud verdicts logged with engine, risk score, reason

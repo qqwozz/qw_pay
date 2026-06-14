@@ -1,28 +1,18 @@
-# Руководство разработчика
+# Development Guide
 
-## Требования
+## Requirements
 
 - Go 1.22+
-- PostgreSQL 16+ (или Docker)
-- Redis 7+ (для антифрода)
-- g++ и libhiredis-dev (для C++ движка)
-- Python 3.12+ (для Python анализа)
+- PostgreSQL 16+ (or Docker)
+- Redis 7+ (for anti-fraud)
+- g++ and libhiredis-dev (for C++ engine)
+- Python 3.12+ (for Python engine)
 
 ---
 
-## Установка
+## Installation
 
-### macOS
-
-```bash
-# Homebrew
-brew install go postgresql redis python3
-
-# libhiredis (для C++)
-brew install hiredis
-```
-
-### Ubuntu/Debian
+### Ubuntu / Debian
 
 ```bash
 # Go
@@ -31,7 +21,7 @@ sudo snap install go --classic
 # PostgreSQL + Redis
 sudo apt install postgresql redis-server
 
-# C++ зависимости
+# C++ dependencies
 sudo apt install g++ libhiredis-dev
 
 # Python
@@ -39,75 +29,61 @@ sudo apt install python3 python3-pip
 pip3 install redis
 ```
 
+### macOS
+
+```bash
+brew install go postgresql redis python3 hiredis
+```
+
 ### Arch Linux
 
 ```bash
-# Go
-sudo pacman -S go
-
-# PostgreSQL + Redis
-sudo pacman -S postgresql redis
-
-# C++ зависимости
-sudo pacman -S hiredis
-
-# Python
-sudo pacman -S python python-pip
+sudo pacman -S go postgresql redis hiredis python python-pip
 pip install redis
 ```
 
 ---
 
-## Настройка
-
-### 1. Создайте .env файл
+## Setup
 
 ```bash
+# 1. Clone and configure
+git clone <repo-url> && cd qw_pay
 cp .env.example .env
-```
 
-### 2. Настройте переменные
+# 2. Edit .env if needed
+# DATABASE_URL, JWT_SECRET, PORT, REDIS_ADDR
 
-```env
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/qw_pay?sslmode=disable
-JWT_SECRET=your-secret-key-here
-PORT=8080
-REDIS_ADDR=127.0.0.1:6379
-```
-
-### 3. Запустите PostgreSQL и Redis
-
-```bash
+# 3. Start PostgreSQL + Redis
 make db
-```
 
-### 4. Инициализируйте БД
-
-```bash
-psql postgres://postgres:postgres@localhost:5432/qw_pay < migrations/001_init.sql
+# 4. Run migrations (auto via Docker, manual otherwise)
+psql $DATABASE_URL < migrations/001_init.sql
+psql $DATABASE_URL < migrations/002_exchange_rates.sql
+psql $DATABASE_URL < migrations/003_audit_fraud_tables.sql
 ```
 
 ---
 
-## Запуск
+## Running
 
-### Только сервер
+### Server Only
 
 ```bash
 make run
 ```
 
-### Сервер + Антифрод
+### Server + Anti-Fraud
 
 ```bash
-# Терминал 1: Сервер
+# Terminal 1: Server
 make run
 
-# Терминал 2: Антифрод
+# Terminal 2: Anti-fraud engines
 make antifraud
 ```
 
-### Docker (всё вместе)
+### Full Docker Stack
 
 ```bash
 cd deploy
@@ -116,35 +92,43 @@ docker-compose up -d
 
 ---
 
-## Структура кода
+## Project Structure
 
 ```
 internal/
-├── auth/              # Сервис аутентификации
-│   ├── handler.go     # HTTP-хендлеры
-│   ├── service.go     # Бизнес-логика
-│   └── repository.go  # Доступ к БД
-├── account/           # Сервис счетов
+├── auth/              # Authentication (register, OTP, JWT)
+│   ├── handler.go     # HTTP handlers
+│   ├── service.go     # Business logic
+│   └── repository.go  # Database access
+├── account/           # Accounts (CRUD, block, bonus)
 │   ├── handler.go
 │   ├── service.go
 │   └── repository.go
-├── transaction/       # Сервис переводов
+├── transaction/       # Transfers (ACID, idempotent, retry)
 │   ├── handler.go
 │   ├── service.go
 │   └── repository.go
-├── antifraud/         # Антифрод клиент
+├── currency/          # Exchange rates
+│   ├── handler.go
+│   ├── service.go
+│   └── repository.go
+├── audit/             # Audit log + admin API
+│   ├── handler.go
+│   ├── service.go
+│   └── repository.go
+├── antifraud/         # Anti-fraud Redis client
 │   └── client.go
-├── config/            # Конфигурация
-├── database/          # Пул соединений
-├── middleware/        # JWT middleware
-└── model/             # Модели данных
+├── config/            # Environment config
+├── database/          # pgxpool connection
+├── middleware/        # JWT + AdminRequired
+└── model/             # Data models + enums
 ```
 
 ---
 
-## Добавление нового эндпоинта
+## Adding a New Endpoint
 
-### 1. Создайте репозиторий (если нужен доступ к БД)
+### 1. Create Repository (if DB access needed)
 
 ```go
 // internal/myfeature/repository.go
@@ -154,12 +138,16 @@ type Repository struct {
     db *pgxpool.Pool
 }
 
+func NewRepository(db *pgxpool.Pool) *Repository {
+    return &Repository{db: db}
+}
+
 func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*model.Thing, error) {
-    // SQL запрос
+    // SQL query
 }
 ```
 
-### 2. Создайте сервис
+### 2. Create Service
 
 ```go
 // internal/myfeature/service.go
@@ -169,12 +157,16 @@ type Service struct {
     repo *Repository
 }
 
+func NewService(repo *Repository) *Service {
+    return &Service{repo: repo}
+}
+
 func (s *Service) DoSomething(ctx context.Context, id uuid.UUID) error {
-    // Бизнес-логика
+    // Business logic
 }
 ```
 
-### 3. Создайте хендлер
+### 3. Create Handler
 
 ```go
 // internal/myfeature/handler.go
@@ -184,59 +176,60 @@ type Handler struct {
     svc *Service
 }
 
+func NewHandler(svc *Service) *Handler {
+    return &Handler{svc: svc}
+}
+
 func (h *Handler) HandleRequest(c *gin.Context) {
-    // Валидация, вызов сервиса, ответ
+    // Validation, service call, response
 }
 ```
 
-### 4. Зарегистрируйте в main.go
+### 4. Register in main.go
 
 ```go
-myFeatureRepo := myfeature.NewRepository(database.Pool)
-myFeatureSvc := myfeature.NewService(myFeatureRepo)
-myFeatureH := myfeature.NewHandler(myFeatureSvc)
+myRepo := myfeature.NewRepository(database.Pool)
+mySvc := myfeature.NewService(myRepo)
+myH := myfeature.NewHandler(mySvc)
 
-v1.POST("/my-endpoint", myFeatureH.HandleRequest)
+v1.POST("/my-endpoint", myH.HandleRequest)
 ```
 
 ---
 
-## Тестирование
+## Testing
 
-### Запуск тестов
+### Run Tests
 
 ```bash
 make test
 ```
 
-### Ручное тестирование
+### Manual Testing with curl
 
 ```bash
-# Регистрация
+# Register
 curl -X POST http://localhost:8080/api/v1/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@test.com","phone":"+79001234567","password":"secret123"}'
 
-# Получите OTP из логов (logs/server.log)
-
-# Подтверждение
+# Get OTP from logs/server.log, then verify
 curl -X POST http://localhost:8080/api/v1/verify \
   -H "Content-Type: application/json" \
   -d '{"email":"test@test.com","otp_code":"123456"}'
 
-# Вход
+# Login
 curl -X POST http://localhost:8080/api/v1/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@test.com","password":"secret123"}'
-# Сохраните access_token
 
-# Создание счёта
+# Create account
 curl -X POST http://localhost:8080/api/v1/accounts \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"currency":"USD"}'
 
-# Перевод
+# Transfer
 curl -X POST http://localhost:8080/api/v1/transactions \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
@@ -246,44 +239,30 @@ curl -X POST http://localhost:8080/api/v1/transactions \
     "amount":10,
     "idempotency_key":"test-key-1"
   }'
+
+# View audit logs (requires ADMIN role)
+curl http://localhost:8080/api/v1/admin/audit-logs \
+  -H "Authorization: Bearer <admin-token>"
 ```
 
 ---
 
-## Логи
+## Anti-Fraud
 
-Логи пишутся в `logs/server.log` и stdout.
-
-```bash
-# Смотреть логи в реальном времени
-make logs
-
-# Или
-tail -f logs/server.log
-```
-
----
-
-## Антифрод
-
-### C++ движок
+### C++ Engine
 
 ```bash
-# Собрать
 make antifraud-build
-
-# Запустить
 ./antifraud/cpp/fraud_engine
 ```
 
-### Python движок
+### Python Engine
 
 ```bash
-# Запустить
 python3 antifraud/python/service.py
 ```
 
-### Оркестратор (оба движка)
+### Orchestrator (both engines)
 
 ```bash
 make antifraud
@@ -291,52 +270,51 @@ make antifraud
 
 ---
 
-## Полезные команды
+## Troubleshooting
+
+### "connection refused" to PostgreSQL
 
 ```bash
-make help            # Все команды
-make build           # Собрать сервер
-make run             # Запустить сервер
-make db              # Запустить БД + Redis
-make stop            # Остановить контейнеры
-make antifraud       # Запустить антифрод
-make demo            # Открыть демо
-make logs            # Смотреть логи
-make test            # Запустить тесты
-make clean           # Очистить
-```
-
----
-
-## Исправление проблем
-
-### "connection refused" к PostgreSQL
-
-```bash
-# Проверьте, что PostgreSQL запущен
 docker-compose ps
-
-# Перезапустите
 make stop && make db
 ```
 
-### "connection refused" к Redis
+### "connection refused" to Redis
 
 ```bash
-# Запустите Redis
 redis-server --daemonize yes
-
-# Или через Docker
+# or
 docker run -d -p 6379:6379 redis:7-alpine
 ```
 
-### Ошибка сборки C++
+### C++ build error
 
 ```bash
-# Установите зависимости
 # macOS:
 brew install hiredis
 
 # Ubuntu:
 sudo apt install g++ libhiredis-dev
+```
+
+### Migration already applied
+
+The Docker setup auto-runs migrations via `/docker-entrypoint-initdb.d`. For manual setup, run each migration file once.
+
+---
+
+## Make Commands
+
+```bash
+make help              # Show all commands
+make db                # Start PostgreSQL + Redis
+make build             # Build Go server
+make run               # Build and run server
+make lint              # Run golangci-lint
+make test              # Run tests
+make antifraud-build   # Build C++ engine
+make antifraud         # Start C++ + Python engines
+make demo              # Open demo page
+make logs              # Tail server logs
+make clean             # Remove binaries
 ```

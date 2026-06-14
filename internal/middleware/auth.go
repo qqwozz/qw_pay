@@ -11,11 +11,8 @@ import (
 	"github.com/qw_pay/internal/config"
 )
 
-// AuthRequired — middleware для проверки JWT-токена.
-// Извлекает user_id из токена и сохраняет в контексте запроса.
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Извлекаем токен из заголовка Authorization
 		header := c.GetHeader("Authorization")
 		if header == "" || !strings.HasPrefix(header, "Bearer ") {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
@@ -24,7 +21,6 @@ func AuthRequired() gin.HandlerFunc {
 		}
 		tokenStr := strings.TrimPrefix(header, "Bearer ")
 
-		// Парсим и проверяем подпись токена
 		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 			return []byte(config.C.JWTSecret), nil
 		})
@@ -34,7 +30,6 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// Извлекаем claims (sub = user_id)
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid claims"})
@@ -54,8 +49,20 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// Сохраняем user_id в контексте для последующих хендлеров
 		c.Set("user_id", userID)
+		c.Set("user_role", claims["role"])
+		c.Next()
+	}
+}
+
+func AdminRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("user_role")
+		if !exists || role.(string) != "ADMIN" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

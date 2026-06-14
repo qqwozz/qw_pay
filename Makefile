@@ -3,6 +3,7 @@
 APP_NAME := server
 MAIN := ./cmd/server
 PORT := 8080
+GO := /usr/local/go/bin/go
 
 help:
 	@echo ""
@@ -30,17 +31,17 @@ help:
 	@echo ""
 
 db:
-	docker-compose up -d db redis
+	docker compose up -d db redis
 	@echo "Waiting for services..."
 	@sleep 3
 	@echo "PostgreSQL: localhost:5432"
 	@echo "Redis:      localhost:6379"
 
 stop:
-	docker-compose down
+	docker compose down
 
 build:
-	CGO_ENABLED=0 go build -o $(APP_NAME) $(MAIN)
+	CGO_ENABLED=0 $(GO) build -o $(APP_NAME) $(MAIN)
 
 run: build
 	./$(APP_NAME)
@@ -50,7 +51,7 @@ lint:
 	golangci-lint run ./...
 
 test:
-	go test -v ./...
+	$(GO) test -v ./...
 
 antifraud-build:
 	$(MAKE) -C antifraud/cpp

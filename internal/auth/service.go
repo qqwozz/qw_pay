@@ -91,33 +91,20 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (*mo
 	return user, nil
 }
 
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
+	return s.repo.GetByEmail(ctx, email)
+}
+
 func (s *Service) VerifyUser(ctx context.Context, email string) error {
 	return s.repo.SetVerified(ctx, email)
 }
 
-func (s *Service) CreateToken(userID uuid.UUID) (string, error) {
+func (s *Service) CreateToken(userID uuid.UUID, role string) (string, error) {
 	claims := jwt.MapClaims{
-		"sub": userID.String(),
-		"exp": time.Now().Add(time.Duration(config.C.JWTExpireHours) * time.Hour).Unix(),
+		"sub":  userID.String(),
+		"role": role,
+		"exp":  time.Now().Add(time.Duration(config.C.JWTExpireHours) * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(config.C.JWTSecret))
-}
-
-func (s *Service) DecodeToken(tokenStr string) (uuid.UUID, error) {
-	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-		return []byte(config.C.JWTSecret), nil
-	})
-	if err != nil || !token.Valid {
-		return uuid.Nil, fmt.Errorf("invalid token")
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid claims")
-	}
-	sub, ok := claims["sub"].(string)
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid subject")
-	}
-	return uuid.Parse(sub)
 }

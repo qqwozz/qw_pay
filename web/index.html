@@ -209,6 +209,37 @@ pre .err { color:var(--red); }
     <pre id="raw-out"><span class="empty">Ответ сервера…</span></pre>
   </div>
 
+  <!-- 10. Admin: Audit Log -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">10</span> Audit Log <span class="badge badge-amber">Admin</span></div>
+    <p style="font-size:.75rem;color:var(--muted);margin-bottom:.5rem;">Требуется роль ADMIN в JWT</p>
+    <div class="row">
+      <div><label>Действие</label>
+        <select id="audit-action">
+          <option value="">Все</option>
+          <option value="TRANSFER_COMPLETED">TRANSFER_COMPLETED</option>
+          <option value="TRANSFER_BLOCKED_BY_FRAUD">TRANSFER_BLOCKED_BY_FRAUD</option>
+          <option value="ACCOUNT_CREATED">ACCOUNT_CREATED</option>
+          <option value="ACCOUNT_BLOCKED">ACCOUNT_BLOCKED</option>
+          <option value="USER_REGISTERED">USER_REGISTERED</option>
+          <option value="USER_VERIFIED">USER_VERIFIED</option>
+        </select>
+      </div>
+      <div><label>Страница</label><input id="audit-page" type="number" value="1" min="1"></div>
+    </div>
+    <button class="btn btn-amber" onclick="doAuditLogs()">Загрузить логи</button>
+    <pre id="audit-out"><span class="empty">Нажмите «Загрузить логи»…</span></pre>
+  </div>
+
+  <!-- 11. Admin: Block Account -->
+  <div class="card">
+    <div class="card-title"><span class="step-num">11</span> Админ-блокировка счёта <span class="badge badge-red">Admin</span></div>
+    <label>ID счёта</label>
+    <input id="admin-block-id" placeholder="UUID счёта">
+    <button class="btn btn-red" onclick="doAdminBlockAccount()">Заблокировать (админ)</button>
+    <pre id="admin-block-out"><span class="empty">Результат появится здесь…</span></pre>
+  </div>
+
 </div>
 
 <script>
@@ -368,6 +399,24 @@ async function doBlockAccountAF() {
   const r = await req('POST', '/antifraud/block-account', { account_id: id });
   show('af-out', r);
   toast(r.status === 200 ? 'Счёт заблокирован в AF' : 'Ошибка', r.status === 200);
+}
+
+async function doAuditLogs() {
+  const action = document.getElementById('audit-action').value;
+  const page = document.getElementById('audit-page').value;
+  let path = '/admin/audit-logs?page=' + page + '&page_size=20';
+  if (action) path += '&action=' + action;
+  const r = await req('GET', path);
+  show('audit-out', r);
+  toast(r.status === 200 ? 'Логи загружены' : 'Ошибка (нужна роль ADMIN)', r.status === 200);
+}
+
+async function doAdminBlockAccount() {
+  const id = document.getElementById('admin-block-id').value;
+  if (!id) { toast('Введите ID счёта', false); return; }
+  const r = await req('POST', '/admin/accounts/block', { account_id: id });
+  show('admin-block-out', r);
+  toast(r.status === 200 ? 'Счёт заблокирован админом' : 'Ошибка', r.status === 200);
 }
 
 checkConn();

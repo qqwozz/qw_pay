@@ -1,14 +1,14 @@
-# API Documentation
+# API Reference
 
-## Базовый URL
+## Base URL
 
 ```
 http://localhost:8080/api/v1
 ```
 
-## Аутентификация
+## Authentication
 
-Для защищённых эндпоинтов передавайте JWT-токен в заголовке:
+For protected endpoints, pass the JWT token in the `Authorization` header:
 
 ```
 Authorization: Bearer <token>
@@ -16,11 +16,11 @@ Authorization: Bearer <token>
 
 ---
 
-## Публичные эндпоинты
+## Public Endpoints
 
 ### POST /register
 
-Регистрация нового пользователя.
+Register a new user.
 
 **Request:**
 ```json
@@ -40,13 +40,13 @@ Authorization: Bearer <token>
 ```
 
 **Errors:**
-- `400` — Невалидные данные или email уже занят
+- `400` — Invalid data or email already taken
 
 ---
 
 ### POST /verify
 
-Подтверждение аккаунта OTP-кодом.
+Verify account with OTP code.
 
 **Request:**
 ```json
@@ -64,13 +64,13 @@ Authorization: Bearer <token>
 ```
 
 **Errors:**
-- `400` — Неверный или просроченный OTP
+- `400` — Invalid or expired OTP
 
 ---
 
 ### POST /login
 
-Вход в систему. Возвращает JWT-токен.
+Login and receive a JWT token.
 
 **Request:**
 ```json
@@ -85,21 +85,109 @@ Authorization: Bearer <token>
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "token_type": "bearer",
-  "user_id": "550e8400-e29b-41d4-a716-446655440000"
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "role": "USER"
 }
 ```
 
 **Errors:**
-- `401` — Неверные учётные данные
-- `403` — Аккаунт не подтверждён
+- `401` — Invalid credentials
+- `403` — Account not verified
 
 ---
 
-## Защищённые эндпоинты
+## Currency Endpoints
+
+### GET /currencies
+
+List supported currencies.
+
+**Response (200):**
+```json
+{
+  "currencies": ["RUB", "USD", "EUR"]
+}
+```
+
+### GET /currencies/rates
+
+Get all exchange rates.
+
+**Response (200):**
+```json
+{
+  "rates": [
+    {"from_currency": "RUB", "to_currency": "USD", "rate": 0.011, "source": "initial"},
+    {"from_currency": "USD", "to_currency": "RUB", "rate": 90.91, "source": "initial"}
+  ]
+}
+```
+
+### GET /currencies/rate?from=RUB&to=USD
+
+Get a specific exchange rate.
+
+**Response (200):**
+```json
+{
+  "from_currency": "RUB",
+  "to_currency": "USD",
+  "rate": 0.011,
+  "source": "initial"
+}
+```
+
+### POST /currencies/convert
+
+Convert amount between currencies.
+
+**Request:**
+```json
+{
+  "amount": 1000,
+  "from": "RUB",
+  "to": "USD"
+}
+```
+
+**Response (200):**
+```json
+{
+  "original_amount": 1000,
+  "original_currency": "RUB",
+  "converted_amount": 11,
+  "target_currency": "USD",
+  "exchange_rate": 0.011
+}
+```
+
+### POST /currencies/rate *(Authenticated)*
+
+Update an exchange rate.
+
+**Request:**
+```json
+{
+  "from": "RUB",
+  "to": "USD",
+  "rate": 0.012
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Rate updated"
+}
+```
+
+---
+
+## Authenticated Endpoints
 
 ### POST /accounts
 
-Создание нового счёта. При создании начисляется бонус 100 единиц валюты.
+Create a new account. Welcome bonus: 100 units of the chosen currency.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -128,7 +216,7 @@ Authorization: Bearer <token>
 
 ### GET /accounts
 
-Получение списка счетов пользователя.
+List user's accounts.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -152,7 +240,7 @@ Authorization: Bearer <token>
 
 ### POST /accounts/:id/block
 
-Блокировка счёта.
+Block own account.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -164,14 +252,14 @@ Authorization: Bearer <token>
 ```
 
 **Errors:**
-- `403` — Счёт не принадлежит пользователю
-- `404` — Счёт не найден
+- `403` — Account doesn't belong to you
+- `404` — Account not found
 
 ---
 
 ### POST /transactions
 
-Создание перевода между счетами.
+Create a transfer between accounts.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -181,6 +269,7 @@ Authorization: Bearer <token>
   "from_account_id": "660e8400-e29b-41d4-a716-446655440001",
   "to_account_id": "660e8400-e29b-41d4-a716-446655440002",
   "amount": 50.00,
+  "source_currency": "USD",
   "idempotency_key": "unique-key-123"
 }
 ```
@@ -193,23 +282,28 @@ Authorization: Bearer <token>
   "from_account_id": "660e8400-e29b-41d4-a716-446655440001",
   "to_account_id": "660e8400-e29b-41d4-a716-446655440002",
   "amount": 50.0,
-  "currency": "USD",
+  "currency": "EUR",
+  "source_currency": "USD",
+  "exchange_rate_used": 0.92,
+  "converted_amount": 46.0,
   "status": "EXECUTED",
   "created_at": "2024-01-15T10:35:00Z"
 }
 ```
 
 **Errors:**
-- `400` — Недостаточно средств, превышен лимит, невалидные данные
-- `403` — Счёт не принадлежит пользователю / заблокирован антифродом
+- `400` — Insufficient funds, limit exceeded, invalid data
+- `403` — Account blocked / anti-fraud rejection
 
 ---
 
 ### GET /transactions
 
-История переводов пользователя.
+Transaction history with pagination.
 
 **Headers:** `Authorization: Bearer <token>`
+
+**Query params:** `page` (default: 1), `page_size` (default: 20, max: 100)
 
 **Response (200):**
 ```json
@@ -225,21 +319,13 @@ Authorization: Bearer <token>
 
 ### POST /antifraud/block-user
 
-Блокировка пользователя в антифрод-системе.
+Block a user in the anti-fraud system.
 
 **Headers:** `Authorization: Bearer <token>`
 
 **Request:**
 ```json
 {
-  "user_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-**Response (200):**
-```json
-{
-  "message": "User blocked in anti-fraud",
   "user_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
@@ -248,7 +334,62 @@ Authorization: Bearer <token>
 
 ### POST /antifraud/block-account
 
-Блокировка счёта в антифрод-системе.
+Block an account in the anti-fraud system.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "account_id": "660e8400-e29b-41d4-a716-446655440001"
+}
+```
+
+---
+
+## Admin Endpoints
+
+All admin endpoints require `role=ADMIN` in the JWT token.
+
+### GET /admin/audit-logs
+
+View audit log entries.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query params:**
+- `page` (default: 1)
+- `page_size` (default: 20, max: 100)
+- `user_id` (optional, UUID filter)
+- `action` (optional, filter by action type)
+
+**Available actions:** `TRANSFER_COMPLETED`, `TRANSFER_BLOCKED_BY_FRAUD`, `ACCOUNT_CREATED`, `ACCOUNT_BLOCKED`, `USER_REGISTERED`, `USER_VERIFIED`
+
+**Response (200):**
+```json
+{
+  "logs": [
+    {
+      "id": "...",
+      "user_id": "...",
+      "action": "TRANSFER_COMPLETED",
+      "entity_type": "transaction",
+      "entity_id": "...",
+      "ip_address": "127.0.0.1",
+      "created_at": "2024-01-15T10:35:00Z"
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+---
+
+### POST /admin/accounts/block
+
+Admin block any account (bypasses ownership check).
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -262,14 +403,13 @@ Authorization: Bearer <token>
 **Response (200):**
 ```json
 {
-  "message": "Account blocked in anti-fraud",
-  "account_id": "660e8400-e29b-41d4-a716-446655440001"
+  "message": "Account blocked by admin"
 }
 ```
 
 ---
 
-## Курсы валют
+## Exchange Rates
 
 | From | To | Rate |
 |------|----|------|
@@ -282,20 +422,20 @@ Authorization: Bearer <token>
 
 ---
 
-## Ошибки
+## Error Format
 
-Все ошибки возвращаются в формате:
+All errors return:
 
 ```json
 {
-  "error": "Описание ошибки"
+  "error": "Description of the error"
 }
 ```
 
-| Код | Описание |
-|-----|----------|
-| `400` | Невалидные данные запроса |
-| `401` | Не авторизован |
-| `403` | Доступ запрещён |
-| `404` | Ресурс не найден |
-| `500` | Внутренняя ошибка сервера |
+| Code | Description |
+|------|-------------|
+| `400` | Bad request / validation error |
+| `401` | Not authenticated |
+| `403` | Forbidden (ownership / admin required / anti-fraud) |
+| `404` | Resource not found |
+| `500` | Internal server error |
