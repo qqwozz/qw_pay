@@ -83,7 +83,28 @@ func main() {
 	r.Static("/static", "./web")
 
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "timestamp": time.Now().Format(time.RFC3339)})
+		status := gin.H{"status": "ok", "timestamp": time.Now().Format(time.RFC3339)}
+
+		if err := database.Pool.Ping(c.Request.Context()); err != nil {
+			status["database"] = "unreachable"
+			status["status"] = "degraded"
+			c.JSON(http.StatusServiceUnavailable, status)
+			return
+		}
+		status["database"] = "ok"
+
+		if fraudClient != nil {
+			if err := fraudClient.Ping(c.Request.Context()); err != nil {
+				status["redis"] = "unreachable"
+				status["status"] = "degraded"
+			} else {
+				status["redis"] = "ok"
+			}
+		} else {
+			status["redis"] = "disabled"
+		}
+
+		c.JSON(http.StatusOK, status)
 	})
 
 	v1 := r.Group("/api/v1")
