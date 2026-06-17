@@ -2,7 +2,7 @@ package account
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -24,7 +24,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, currency string)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Account created: id=%s user=%s currency=%s bonus=%.2f", acc.ID, userID, currency, WelcomeBonus)
+	slog.Info("account created", "id", acc.ID, "user", userID, "currency", currency, "bonus", WelcomeBonus)
 	return acc, nil
 }
 

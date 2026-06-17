@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,42 +18,45 @@ import (
 	"github.com/qw_pay/internal/auth"
 	"github.com/qw_pay/internal/config"
 	"github.com/qw_pay/internal/database"
+	"github.com/qw_pay/internal/logger"
 	"github.com/qw_pay/internal/middleware"
 	"github.com/qw_pay/internal/ratelimit"
 	"github.com/qw_pay/internal/transaction"
 )
 
-func setupLogger() {
+func main() {
 	_ = os.MkdirAll("logs", 0o750)
 	logFile, err := os.OpenFile("logs/server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		log.Fatal("Failed to open log file:", err)
+		slog.Error("failed to open log file", "error", err)
+		os.Exit(1)
 	}
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
-	log.SetOutput(multiWriter)
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-}
+	defer func() { _ = logFile.Close() }()
 
-func main() {
-	setupLogger()
-	log.Printf("=== QW Pay server starting at %s ===", time.Now().Format(time.RFC3339))
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	logger.Setup(multiWriter)
+
+	logger.Info("server starting", "time", time.Now().Format(time.RFC3339))
 
 	config.Load()
-	log.Printf("Config loaded — port=%s, max_transfer=%.0f, daily_limit=%.0f",
-		config.C.ServerPort, config.C.MaxTransferAmount, config.C.DailyLimit)
+	logger.Info("config loaded",
+		"port", config.C.ServerPort,
+		"max_transfer", config.C.MaxTransferAmount,
+		"daily_limit", config.C.DailyLimit,
+	)
 
 	database.Connect()
 	defer database.Close()
-	log.Println("Database connected")
+	logger.Info("database connected")
 
 	var fraudClient *antifraud.Client
 	fraudClient = antifraud.NewClient(config.C.RedisAddr)
 	if err := fraudClient.Ping(context.Background()); err != nil {
-		log.Printf("[ANTIFRAUD] Redis not available: %v — anti-fraud disabled", err)
+		logger.Warn("redis not available, anti-fraud disabled", "error", err)
 		_ = fraudClient.Close()
 		fraudClient = nil
 	} else {
-		log.Println("[ANTIFRAUD] Connected to Redis — anti-fraud active")
+		logger.Info("redis connected, anti-fraud active")
 		defer func() { _ = fraudClient.Close() }()
 	}
 
@@ -75,7 +78,6 @@ func main() {
 	}
 
 	r := gin.Default()
-
 	r.Use(middleware.RequestID())
 
 	r.StaticFile("/", "./web/index.html")
@@ -138,27 +140,28 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Server listening on http://localhost%s", addr)
-		log.Printf("Demo page: http://localhost%s/demo", addr)
-		log.Printf("Health: http://localhost%s/health", addr)
-		log.Printf("Logs: logs/server.log")
+		logger.Info("server listening",
+			"addr", addr,
+			"demo", fmt.Sprintf("http://localhost%s/demo", addr),
+			"health", fmt.Sprintf("http://localhost%s/health", addr),
+		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			logger.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
-		cancel()
+		logger.Error("server forced to shutdown", "error", err)
 		return
 	}
-	log.Println("Server exited gracefully")
+	logger.Info("server exited gracefully")
 }

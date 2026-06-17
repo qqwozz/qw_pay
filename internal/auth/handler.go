@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -46,7 +46,7 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	otp := h.svc.GenerateOTP()
 	h.svc.StoreOTP(req.Email, otp)
-	log.Printf("OTP for %s: %s", req.Email, otp)
+	slog.Info("OTP generated", "email", req.Email, "otp", otp)
 	response.Created(c, gin.H{
 		"message": "Registration successful. Check logs for OTP code.",
 		"user_id": user.ID,

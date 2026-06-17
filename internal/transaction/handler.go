@@ -1,7 +1,7 @@
 package transaction
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -60,15 +60,21 @@ func (h *Handler) Create(c *gin.Context) {
 		)
 		switch {
 		case err != nil:
-			log.Printf("[ANTIFRAUD] Check failed: %v — proceeding without anti-fraud", err)
+			slog.Warn("antifraud check failed, proceeding", "error", err)
 		case !verdict.Approved:
-			log.Printf("[ANTIFRAUD] Transaction BLOCKED: id=%s reason=%s risk=%d",
-				verdict.ID, verdict.Reason, verdict.RiskScore)
+			slog.Warn("transaction blocked",
+				"verdict_id", verdict.ID,
+				"reason", verdict.Reason,
+				"risk", verdict.RiskScore,
+			)
 			response.Error(c, http.StatusForbidden, "Transaction blocked by anti-fraud system")
 			return
 		default:
-			log.Printf("[ANTIFRAUD] Transaction APPROVED: id=%s risk=%d engine=%s",
-				verdict.ID, verdict.RiskScore, verdict.Engine)
+			slog.Info("transaction approved",
+				"verdict_id", verdict.ID,
+				"risk", verdict.RiskScore,
+				"engine", verdict.Engine,
+			)
 		}
 	}
 

@@ -3,7 +3,7 @@ package transaction
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -118,8 +118,14 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 		return nil, apperr.Wrap(err, "failed to commit transaction")
 	}
 
-	log.Printf("Transaction executed: id=%s from=%s to=%s amount=%.2f %s → %s",
-		transaction.ID, fromID, toID, amount, sourceCurrency, targetCurrency)
+	slog.Info("transaction executed",
+		"id", transaction.ID,
+		"from", fromID,
+		"to", toID,
+		"amount", amount,
+		"from_currency", sourceCurrency,
+		"to_currency", targetCurrency,
+	)
 	return transaction, nil
 }
 

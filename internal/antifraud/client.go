@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -60,7 +60,7 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 	}
 
 	if err := c.rdb.LPush(ctx, "antifraud:queue:python", data).Err(); err != nil {
-		log.Printf("[ANTIFRAUD] Failed to push to python queue: %v", err)
+		slog.Warn("failed to push to python queue", "error", err)
 	}
 
 	key := fmt.Sprintf("antifraud:verdict:%s", req.ID)
@@ -71,7 +71,7 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 	for {
 		select {
 		case <-deadline:
-			log.Printf("[ANTIFRAUD] Timeout waiting for verdict on %s, defaulting to APPROVED", req.ID)
+			slog.Warn("antifraud timeout, defaulting to approved", "request_id", req.ID)
 			return &Verdict{
 				ID:        req.ID,
 				Approved:  true,
@@ -88,8 +88,13 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 			if err := json.Unmarshal([]byte(val), &verdict); err != nil {
 				continue
 			}
-			log.Printf("[ANTIFRAUD] Verdict received: id=%s approved=%v risk=%d engine=%s reason=%s",
-				verdict.ID, verdict.Approved, verdict.RiskScore, verdict.Engine, verdict.Reason)
+			slog.Info("antifraud verdict received",
+				"id", verdict.ID,
+				"approved", verdict.Approved,
+				"risk", verdict.RiskScore,
+				"engine", verdict.Engine,
+				"reason", verdict.Reason,
+			)
 			return &verdict, nil
 		}
 	}
