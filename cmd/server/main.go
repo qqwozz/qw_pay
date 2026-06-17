@@ -19,6 +19,7 @@ import (
 	"github.com/qw_pay/internal/config"
 	"github.com/qw_pay/internal/database"
 	"github.com/qw_pay/internal/middleware"
+	"github.com/qw_pay/internal/ratelimit"
 	"github.com/qw_pay/internal/transaction"
 )
 
@@ -84,9 +85,11 @@ func main() {
 	})
 
 	v1 := r.Group("/api/v1")
-	v1.POST("/register", authH.Register)
-	v1.POST("/verify", authH.VerifyOTP)
-	v1.POST("/login", authH.Login)
+
+	authRateLimit := ratelimit.New(10, 20)
+	v1.POST("/register", authRateLimit.Middleware(), authH.Register)
+	v1.POST("/verify", authRateLimit.Middleware(), authH.VerifyOTP)
+	v1.POST("/login", authRateLimit.Middleware(), authH.Login)
 
 	authGroup := v1.Group("")
 	authGroup.Use(middleware.AuthRequired())
