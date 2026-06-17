@@ -2,11 +2,13 @@ package transaction
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/qw_pay/internal/errors"
 	"github.com/qw_pay/internal/model"
 )
 
@@ -28,7 +30,7 @@ func (r *Repository) GetByIDempotencyKey(ctx context.Context, key string) (*mode
 		&tx.Amount, &tx.Currency, &tx.SourceCurrency, &tx.ExchangeRate,
 		&tx.Status, &tx.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get transaction by idempotency key: %w", err)
 	}
 	return tx, nil
 }
@@ -44,7 +46,7 @@ func (r *Repository) Create(ctx context.Context, tx pgx.Tx, key string, fromID, 
 		&t.Amount, &t.Currency, &t.SourceCurrency, &t.ExchangeRate,
 		&t.Status, &t.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create transaction: %w", err)
 	}
 	return t, nil
 }
@@ -56,10 +58,10 @@ func (r *Repository) DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid
 		amount, accountID, version,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("debit account: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrOptimisticLock
+		return errors.ErrOptimisticLock
 	}
 	return nil
 }
@@ -71,10 +73,10 @@ func (r *Repository) CreditAccount(ctx context.Context, tx pgx.Tx, accountID uui
 		amount, accountID, version,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("credit account: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrOptimisticLock
+		return errors.ErrOptimisticLock
 	}
 	return nil
 }
@@ -92,18 +94,21 @@ func (r *Repository) ListByUser(ctx context.Context, userID uuid.UUID, offset, l
 		userID, offset, limit,
 	)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("list transactions: %w", err)
 	}
 	defer rows.Close()
 
 	var transactions []model.Transaction
 	for rows.Next() {
 		var tx model.Transaction
-		if err := rows.Scan(&tx.ID, &tx.IdempotencyKey, &tx.FromAccountID, &tx.ToAccountID,
-			&tx.Amount, &tx.Currency, &tx.SourceCurrency, &tx.ExchangeRate, &tx.Status, &tx.CreatedAt); err != nil {
-			return nil, 0, err
+		if scanErr := rows.Scan(&tx.ID, &tx.IdempotencyKey, &tx.FromAccountID, &tx.ToAccountID,
+			&tx.Amount, &tx.Currency, &tx.SourceCurrency, &tx.ExchangeRate, &tx.Status, &tx.CreatedAt); scanErr != nil {
+			return nil, 0, fmt.Errorf("scan transaction: %w", scanErr)
 		}
 		transactions = append(transactions, tx)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, 0, fmt.Errorf("iterate transactions: %w", rowsErr)
 	}
 
 	var total int
@@ -114,7 +119,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID uuid.UUID, offset, l
 		 WHERE a.user_id = $1`, userID,
 	).Scan(&total)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("count transactions: %w", err)
 	}
 
 	return transactions, total, nil

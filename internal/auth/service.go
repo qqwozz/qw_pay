@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/qw_pay/internal/config"
+	apperr "github.com/qw_pay/internal/errors"
 	"github.com/qw_pay/internal/model"
 )
 
@@ -33,18 +34,22 @@ func NewService(repo *UserRepository) *Service {
 func (s *Service) Register(ctx context.Context, email, phone, password string) (*model.User, error) {
 	exists, err := s.repo.ExistsByEmail(ctx, email)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to check email existence")
 	}
 	if exists {
-		return nil, fmt.Errorf("email already registered")
+		return nil, apperr.Conflict("email already registered")
 	}
 
 	hash, err := HashPassword(password)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to hash password")
 	}
 
-	return s.repo.Create(ctx, email, phone, hash)
+	user, err := s.repo.Create(ctx, email, phone, hash)
+	if err != nil {
+		return nil, apperr.Wrap(err, "failed to create user")
+	}
+	return user, nil
 }
 
 func (s *Service) GenerateOTP() string {
@@ -83,16 +88,19 @@ func (s *Service) VerifyOTP(email, code string) bool {
 func (s *Service) Authenticate(ctx context.Context, email, password string) (*model.User, error) {
 	user, err := s.repo.GetByEmail(ctx, email)
 	if err != nil {
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, apperr.Unauthorized("invalid credentials")
 	}
 	if err := CheckPassword(user.PasswordHash, password); err != nil {
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, apperr.Unauthorized("invalid credentials")
 	}
 	return user, nil
 }
 
 func (s *Service) VerifyUser(ctx context.Context, email string) error {
-	return s.repo.SetVerified(ctx, email)
+	if err := s.repo.SetVerified(ctx, email); err != nil {
+		return apperr.Wrap(err, "failed to verify user")
+	}
+	return nil
 }
 
 func (s *Service) CreateToken(userID uuid.UUID) (string, error) {
@@ -101,7 +109,11 @@ func (s *Service) CreateToken(userID uuid.UUID) (string, error) {
 		"exp": time.Now().Add(time.Duration(config.C.JWTExpireHours) * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(config.C.JWTSecret))
+	tokenStr, err := token.SignedString([]byte(config.C.JWTSecret))
+	if err != nil {
+		return "", apperr.Wrap(err, "failed to sign token")
+	}
+	return tokenStr, nil
 }
 
 func (s *Service) DecodeToken(tokenStr string) (uuid.UUID, error) {
@@ -109,15 +121,19 @@ func (s *Service) DecodeToken(tokenStr string) (uuid.UUID, error) {
 		return []byte(config.C.JWTSecret), nil
 	})
 	if err != nil || !token.Valid {
-		return uuid.Nil, fmt.Errorf("invalid token")
+		return uuid.Nil, apperr.Unauthorized("invalid token")
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid claims")
+		return uuid.Nil, apperr.Unauthorized("invalid claims")
 	}
 	sub, ok := claims["sub"].(string)
 	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid subject")
+		return uuid.Nil, apperr.Unauthorized("invalid subject")
 	}
-	return uuid.Parse(sub)
+	parsedUUID, err := uuid.Parse(sub)
+	if err != nil {
+		return uuid.Nil, apperr.Unauthorized("invalid user id")
+	}
+	return parsedUUID, nil
 }

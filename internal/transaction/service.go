@@ -2,18 +2,17 @@ package transaction
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/qw_pay/internal/config"
+	apperr "github.com/qw_pay/internal/errors"
 	"github.com/qw_pay/internal/model"
 )
-
-var ErrOptimisticLock = errors.New("optimistic lock conflict")
 
 var exchangeRates = map[string]float64{
 	"RUB_USD": 0.011,
@@ -29,13 +28,21 @@ type accountReader interface {
 	GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (float64, error)
 }
 
+type txRepository interface {
+	GetByIDempotencyKey(ctx context.Context, key string) (*model.Transaction, error)
+	Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount float64, sourceCurrency, targetCurrency string, exchangeRate *float64) (*model.Transaction, error)
+	DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error
+	CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error
+	ListByUser(ctx context.Context, userID uuid.UUID, offset, limit int) ([]model.Transaction, int, error)
+}
+
 type Service struct {
 	db   *pgxpool.Pool
-	repo *Repository
+	repo txRepository
 	acc  accountReader
 }
 
-func NewService(db *pgxpool.Pool, repo *Repository, acc accountReader) *Service {
+func NewService(db *pgxpool.Pool, repo txRepository, acc accountReader) *Service {
 	return &Service{db: db, repo: repo, acc: acc}
 }
 
@@ -47,65 +54,68 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 
 	from, err := s.acc.GetByID(ctx, fromID)
 	if err != nil {
-		return nil, fmt.Errorf("source account not found")
+		return nil, apperr.NotFound("source account not found")
 	}
 	to, err := s.acc.GetByID(ctx, toID)
 	if err != nil {
-		return nil, fmt.Errorf("target account not found")
+		return nil, apperr.NotFound("target account not found")
 	}
 
 	if from.Status != model.StatusActive || to.Status != model.StatusActive {
-		return nil, fmt.Errorf("account is blocked")
+		return nil, apperr.Forbidden("account is blocked")
+	}
+	if amount <= 0 {
+		return nil, apperr.BadRequest("amount must be positive")
 	}
 	if amount > config.C.MaxTransferAmount {
-		return nil, fmt.Errorf("amount exceeds max transfer limit")
+		return nil, apperr.BadRequest(fmt.Sprintf("amount exceeds max transfer limit of %.2f", config.C.MaxTransferAmount))
 	}
 	if fromID == toID {
-		return nil, fmt.Errorf("cannot transfer to the same account")
+		return nil, apperr.BadRequest("cannot transfer to the same account")
 	}
 
 	dailySum, err := s.acc.GetDailyTransferSum(ctx, fromID)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to get daily transfer sum")
 	}
 	if dailySum+amount > config.C.DailyLimit {
-		return nil, fmt.Errorf("daily transfer limit exceeded")
+		return nil, apperr.BadRequest("daily transfer limit exceeded")
 	}
 
-	var exchangeRate *float64
 	sourceCurrency := string(from.Currency)
 	targetCurrency := string(to.Currency)
+	var exchangeRate *float64
 
 	if sourceCurrency != targetCurrency {
 		key := sourceCurrency + "_" + targetCurrency
 		rate, ok := exchangeRates[key]
 		if !ok {
-			return nil, fmt.Errorf("no exchange rate for %s to %s", sourceCurrency, targetCurrency)
+			return nil, apperr.BadRequest(fmt.Sprintf("no exchange rate for %s to %s", sourceCurrency, targetCurrency))
 		}
 		exchangeRate = &rate
 	}
 
 	dbTx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to begin transaction")
 	}
-	defer dbTx.Rollback(ctx)
+	defer func() { _ = dbTx.Rollback(ctx) }()
 
 	transaction, err := s.repo.Create(ctx, dbTx, idempotencyKey, fromID, toID, amount, sourceCurrency, targetCurrency, exchangeRate)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to create transaction record")
 	}
 
 	if err := s.repo.DebitAccount(ctx, dbTx, fromID, amount, from.Version); err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to debit source account")
 	}
 
 	if err := s.repo.CreditAccount(ctx, dbTx, toID, amount, to.Version); err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to credit target account")
 	}
 
 	if err := dbTx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, apperr.Wrap(err, "failed to commit transaction")
 	}
 
 	log.Printf("Transaction executed: id=%s from=%s to=%s amount=%.2f %s → %s",
@@ -114,6 +124,12 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 }
 
 func (s *Service) ListByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.Transaction, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
 	offset := (page - 1) * pageSize
 	return s.repo.ListByUser(ctx, userID, offset, pageSize)
 }

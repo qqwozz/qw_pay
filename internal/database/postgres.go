@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -9,10 +10,8 @@ import (
 	"github.com/qw_pay/internal/config"
 )
 
-// Pool — пул соединений с PostgreSQL, используемый всеми сервисами.
 var Pool *pgxpool.Pool
 
-// Connect устанавливает соединение с базой данных и проверяет доступность.
 func Connect() {
 	ctx := context.Background()
 	var err error
@@ -26,7 +25,20 @@ func Connect() {
 	log.Println("Connected to PostgreSQL")
 }
 
-// Close закрывает пул соединений при завершении работы приложения.
+func ConnectWithDSN(dsn string) (*pgxpool.Pool, error) {
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("create pool: %w", err)
+	}
+	if err = pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+	return pool, nil
+}
+
 func Close() {
-	Pool.Close()
+	if Pool != nil {
+		Pool.Close()
+	}
 }

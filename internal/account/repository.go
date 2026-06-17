@@ -27,7 +27,7 @@ func (r *Repository) Create(ctx context.Context, userID uuid.UUID, currency stri
 		userID, currency, balance,
 	).Scan(&acc.ID, &acc.UserID, &acc.Currency, &acc.Balance, &acc.Version, &acc.Status, &acc.CreatedAt, &acc.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create account: %w", err)
 	}
 	return acc, nil
 }
@@ -39,7 +39,7 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*model.Account,
 		 FROM accounts WHERE id=$1`, id,
 	).Scan(&acc.ID, &acc.UserID, &acc.Currency, &acc.Balance, &acc.Version, &acc.Status, &acc.CreatedAt, &acc.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get account by id: %w", err)
 	}
 	return acc, nil
 }
@@ -50,7 +50,7 @@ func (r *Repository) ListByUser(ctx context.Context, userID uuid.UUID) ([]model.
 		 FROM accounts WHERE user_id=$1 ORDER BY created_at`, userID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list accounts: %w", err)
 	}
 	defer rows.Close()
 
@@ -58,9 +58,12 @@ func (r *Repository) ListByUser(ctx context.Context, userID uuid.UUID) ([]model.
 	for rows.Next() {
 		var acc model.Account
 		if err := rows.Scan(&acc.ID, &acc.UserID, &acc.Currency, &acc.Balance, &acc.Version, &acc.Status, &acc.CreatedAt, &acc.UpdatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		accounts = append(accounts, acc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate accounts: %w", err)
 	}
 	return accounts, nil
 }
@@ -70,7 +73,7 @@ func (r *Repository) Block(ctx context.Context, id uuid.UUID) error {
 		`UPDATE accounts SET status='BLOCKED', updated_at=NOW() WHERE id=$1 AND status='ACTIVE'`, id,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("block account: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("account already blocked")
@@ -85,5 +88,8 @@ func (r *Repository) GetDailyTransferSum(ctx context.Context, accountID uuid.UUI
 		 WHERE from_account_id=$1 AND created_at >= DATE_TRUNC('day', NOW())
 		 AND status='EXECUTED'`, accountID,
 	).Scan(&sum)
-	return sum, err
+	if err != nil {
+		return 0, fmt.Errorf("get daily transfer sum: %w", err)
+	}
+	return sum, nil
 }

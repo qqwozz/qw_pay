@@ -45,7 +45,7 @@ func (h *Handler) Register(c *gin.Context) {
 	otp := h.svc.GenerateOTP()
 	h.svc.StoreOTP(req.Email, otp)
 	log.Printf("OTP for %s: %s", req.Email, otp)
-	c.JSON(http.StatusOK, gin.H{
+	c.JSON(http.StatusCreated, gin.H{
 		"message": "Registration successful. Check logs for OTP code.",
 		"user_id": user.ID,
 	})

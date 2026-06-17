@@ -7,14 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/qw_pay/internal/antifraud"
 	"github.com/qw_pay/internal/account"
+	"github.com/qw_pay/internal/antifraud"
 )
 
 type Handler struct {
-	svc    *Service
-	acc    *account.Service
-	fraud  *antifraud.Client
+	svc   *Service
+	acc   *account.Service
+	fraud *antifraud.Client
 }
 
 func NewHandler(svc *Service, acc *account.Service, fraud *antifraud.Client) *Handler {
@@ -47,7 +47,9 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 
 	if h.fraud != nil {
-		verdict, err := h.fraud.Check(
+		checkErr := error(nil)
+		var verdict *antifraud.Verdict
+		verdict, checkErr = h.fraud.Check(
 			c.Request.Context(),
 			req.FromAccountID.String(),
 			req.ToAccountID.String(),
@@ -55,9 +57,10 @@ func (h *Handler) Create(c *gin.Context) {
 			string(from.Currency),
 			userID.String(),
 		)
-		if err != nil {
-			log.Printf("[ANTIFRAUD] Check failed: %v — proceeding without anti-fraud", err)
-		} else if !verdict.Approved {
+		switch {
+		case checkErr != nil:
+			log.Printf("[ANTIFRAUD] Check failed: %v — proceeding without anti-fraud", checkErr)
+		case !verdict.Approved:
 			log.Printf("[ANTIFRAUD] Transaction BLOCKED: id=%s reason=%s risk=%d",
 				verdict.ID, verdict.Reason, verdict.RiskScore)
 			c.JSON(http.StatusForbidden, gin.H{
@@ -67,7 +70,7 @@ func (h *Handler) Create(c *gin.Context) {
 				"verdict_id": verdict.ID,
 			})
 			return
-		} else {
+		default:
 			log.Printf("[ANTIFRAUD] Transaction APPROVED: id=%s risk=%d engine=%s",
 				verdict.ID, verdict.RiskScore, verdict.Engine)
 		}
@@ -78,7 +81,7 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, tx)
+	c.JSON(http.StatusCreated, tx)
 }
 
 func (h *Handler) List(c *gin.Context) {

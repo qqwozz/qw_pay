@@ -5,24 +5,26 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/qw_pay/internal/account"
 	"github.com/qw_pay/internal/antifraud"
+	"github.com/qw_pay/internal/auth"
 	"github.com/qw_pay/internal/config"
 	"github.com/qw_pay/internal/database"
 	"github.com/qw_pay/internal/middleware"
-
-	"github.com/qw_pay/internal/auth"
-	"github.com/qw_pay/internal/account"
 	"github.com/qw_pay/internal/transaction"
 )
 
 func setupLogger() {
-	os.MkdirAll("logs", 0755)
-	logFile, err := os.OpenFile("logs/server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	_ = os.MkdirAll("logs", 0o750)
+	logFile, err := os.OpenFile("logs/server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		log.Fatal("Failed to open log file:", err)
 	}
@@ -43,73 +45,94 @@ func main() {
 	defer database.Close()
 	log.Println("Database connected")
 
-	// Anti-fraud client (Redis)
-	fraudClient := antifraud.NewClient("127.0.0.1:6379")
+	var fraudClient *antifraud.Client
+	fraudClient = antifraud.NewClient(config.C.RedisAddr)
 	if err := fraudClient.Ping(context.Background()); err != nil {
 		log.Printf("[ANTIFRAUD] Redis not available: %v — anti-fraud disabled", err)
-		fraudClient.Close()
+		_ = fraudClient.Close()
 		fraudClient = nil
 	} else {
 		log.Println("[ANTIFRAUD] Connected to Redis — anti-fraud active")
-		defer fraudClient.Close()
+		defer func() { _ = fraudClient.Close() }()
 	}
 
-	// Repositories
 	userRepo := auth.NewUserRepository(database.Pool)
 	accountRepo := account.NewRepository(database.Pool)
 	txRepo := transaction.NewRepository(database.Pool)
 
-	// Services
 	authSvc := auth.NewService(userRepo)
 	accountSvc := account.NewService(accountRepo)
 	txSvc := transaction.NewService(database.Pool, txRepo, accountSvc)
 
-	// Handlers
 	authH := auth.NewHandler(authSvc)
 	accountH := account.NewHandler(accountSvc)
 	txH := transaction.NewHandler(txSvc, accountSvc, fraudClient)
 
-	// Anti-fraud handler
 	var afH *antifraud.Handler
 	if fraudClient != nil {
 		afH = antifraud.NewHandler(fraudClient)
 	}
 
-	// Router
 	r := gin.Default()
 
 	r.StaticFile("/", "./web/index.html")
 	r.StaticFile("/demo", "./web/index.html")
 	r.Static("/static", "./web")
 
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "timestamp": time.Now().Format(time.RFC3339)})
+	})
+
 	v1 := r.Group("/api/v1")
-	{
-		v1.POST("/register", authH.Register)
-		v1.POST("/verify", authH.VerifyOTP)
-		v1.POST("/login", authH.Login)
+	v1.POST("/register", authH.Register)
+	v1.POST("/verify", authH.VerifyOTP)
+	v1.POST("/login", authH.Login)
 
-		auth := v1.Group("")
-		auth.Use(middleware.AuthRequired())
-		{
-			auth.POST("/accounts", accountH.Create)
-			auth.GET("/accounts", accountH.List)
-			auth.POST("/accounts/:id/block", accountH.Block)
+	authGroup := v1.Group("")
+	authGroup.Use(middleware.AuthRequired())
+	authGroup.POST("/accounts", accountH.Create)
+	authGroup.GET("/accounts", accountH.List)
+	authGroup.POST("/accounts/:id/block", accountH.Block)
+	authGroup.POST("/transactions", txH.Create)
+	authGroup.GET("/transactions", txH.List)
 
-			auth.POST("/transactions", txH.Create)
-			auth.GET("/transactions", txH.List)
-
-			if afH != nil {
-				auth.POST("/antifraud/block-user", afH.BlockUser)
-				auth.POST("/antifraud/block-account", afH.BlockAccount)
-			}
-		}
+	if afH != nil {
+		authGroup.POST("/antifraud/block-user", afH.BlockUser)
+		authGroup.POST("/antifraud/block-account", afH.BlockAccount)
 	}
 
 	addr := fmt.Sprintf(":%s", config.C.ServerPort)
-	log.Printf("Server listening on http://localhost%s", addr)
-	log.Printf("Demo page: http://localhost%s/demo", addr)
-	log.Printf("Logs: logs/server.log")
-	if err := r.Run(addr); err != nil {
-		log.Fatal(err)
+
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	go func() {
+		log.Printf("Server listening on http://localhost%s", addr)
+		log.Printf("Demo page: http://localhost%s/demo", addr)
+		log.Printf("Health: http://localhost%s/health", addr)
+		log.Printf("Logs: logs/server.log")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
+		cancel()
+		return
+	}
+	log.Println("Server exited gracefully")
 }

@@ -1,0 +1,128 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: CGO_ENABLED=0 go build -o server ./cmd/server
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: server
+          path: server
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: server
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0
+          name: v1.0.0
+          body: |
+            ## QW Pay v1.0.0
+
+            ### Features
+            - User registration with OTP verification
+            - JWT authentication
+            - Multi-currency account management (RUB/USD/EUR)
+            - Real-time transactions with idempotency
+            - Cross-currency transfers with exchange rates
+            - Anti-fraud system integration (C++ + Python via Redis)
+            - Daily transfer limits and max transfer amount
+            - Optimistic locking for concurrent transactions
+            - Graceful shutdown with health check endpoint
+
+            ### Tech Stack
+            - Go 1.22 with Gin framework
+            - PostgreSQL 16 with pgx driver
+            - Redis for anti-fraud queues
+            - Docker + Docker Compose
+            - GitHub Actions CI/CD
+          files: dist/server
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
