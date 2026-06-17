@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 
@@ -38,6 +39,35 @@ func Load() {
 		ServerPort:        getEnv("PORT", "8080"),
 		RedisAddr:         getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 	}
+
+	if err := C.validate(); err != nil {
+		panic(fmt.Sprintf("invalid config: %v", err))
+	}
+}
+
+func (c *Config) validate() error {
+	if c.DatabaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
+	}
+	if c.JWTSecret == "" || c.JWTSecret == "change-me-in-production" {
+		return fmt.Errorf("JWT_SECRET must be set to a secure value")
+	}
+	if c.JWTExpireHours <= 0 {
+		return fmt.Errorf("JWT_EXPIRE_HOURS must be positive")
+	}
+	if c.OTPTTLSeconds <= 0 {
+		return fmt.Errorf("OTP_TTL_SECONDS must be positive")
+	}
+	if c.MaxTransferAmount <= 0 {
+		return fmt.Errorf("MAX_TRANSFER_AMOUNT must be positive")
+	}
+	if c.DailyLimit <= 0 {
+		return fmt.Errorf("DAILY_LIMIT must be positive")
+	}
+	if c.ServerPort == "" {
+		return fmt.Errorf("PORT is required")
+	}
+	return nil
 }
 
 func getEnv(key, fallback string) string {

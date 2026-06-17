@@ -5,6 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/qw_pay/internal/contextkeys"
+	"github.com/qw_pay/internal/response"
 )
 
 type Handler struct {
@@ -20,49 +23,49 @@ type createReq struct {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	userID := c.MustGet("user_id").(uuid.UUID)
+	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	var req createReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	acc, err := h.svc.Create(c.Request.Context(), userID, req.Currency)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, acc)
+	response.Created(c, acc)
 }
 
 func (h *Handler) List(c *gin.Context) {
-	userID := c.MustGet("user_id").(uuid.UUID)
+	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	accounts, err := h.svc.ListByUser(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, accounts)
+	response.OK(c, accounts)
 }
 
 func (h *Handler) Block(c *gin.Context) {
-	userID := c.MustGet("user_id").(uuid.UUID)
+	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	accountID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
+		response.Error(c, http.StatusBadRequest, "Invalid account ID")
 		return
 	}
 	acc, err := h.svc.GetByID(c.Request.Context(), accountID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Account not found"})
+		response.Error(c, http.StatusNotFound, "Account not found")
 		return
 	}
 	if acc.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Not your account"})
+		response.Error(c, http.StatusForbidden, "Not your account")
 		return
 	}
 	if err := h.svc.Block(c.Request.Context(), accountID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Account blocked"})
+	response.OK(c, gin.H{"message": "Account blocked"})
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/qw_pay/internal/config"
+	"github.com/qw_pay/internal/contextkeys"
 )
 
 func init() {
@@ -37,8 +38,7 @@ func TestAuthRequired(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request, _ = http.NewRequest("GET", "/", http.NoBody)
 
-		middleware := AuthRequired()
-		middleware(c)
+		AuthRequired()(c)
 
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("expected 401, got %d", w.Code)
@@ -51,8 +51,7 @@ func TestAuthRequired(t *testing.T) {
 		c.Request, _ = http.NewRequest("GET", "/", http.NoBody)
 		c.Request.Header.Set("Authorization", "Basic abc123")
 
-		middleware := AuthRequired()
-		middleware(c)
+		AuthRequired()(c)
 
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("expected 401, got %d", w.Code)
@@ -65,8 +64,7 @@ func TestAuthRequired(t *testing.T) {
 		c.Request, _ = http.NewRequest("GET", "/", http.NoBody)
 		c.Request.Header.Set("Authorization", "Bearer invalid-token")
 
-		middleware := AuthRequired()
-		middleware(c)
+		AuthRequired()(c)
 
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("expected 401, got %d", w.Code)
@@ -85,14 +83,13 @@ func TestAuthRequired(t *testing.T) {
 		}
 		c.Request.Header.Set("Authorization", "Bearer "+token)
 
-		middleware := AuthRequired()
-		middleware(c)
+		AuthRequired()(c)
 
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
 		}
 
-		storedUserID, exists := c.Get("user_id")
+		storedUserID, exists := c.Get(string(contextkeys.KeyUserID))
 		if !exists {
 			t.Error("user_id should be set in context")
 		}
@@ -107,8 +104,7 @@ func TestAuthRequired(t *testing.T) {
 		c.Request, _ = http.NewRequest("GET", "/", http.NoBody)
 		c.Request.Header.Set("Authorization", "Bearer ")
 
-		middleware := AuthRequired()
-		middleware(c)
+		AuthRequired()(c)
 
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("expected 401, got %d", w.Code)

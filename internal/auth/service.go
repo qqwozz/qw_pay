@@ -28,7 +28,23 @@ type Service struct {
 }
 
 func NewService(repo *UserRepository) *Service {
-	return &Service{repo: repo, otp: make(map[string]*otpEntry)}
+	s := &Service{repo: repo, otp: make(map[string]*otpEntry)}
+	go s.cleanupOTP()
+	return s
+}
+
+func (s *Service) cleanupOTP() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.mu.Lock()
+		for email, entry := range s.otp {
+			if time.Since(entry.createdAt) > time.Duration(config.C.OTPTTLSeconds)*time.Second {
+				delete(s.otp, email)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 func (s *Service) Register(ctx context.Context, email, phone, password string) (*model.User, error) {

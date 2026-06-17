@@ -9,6 +9,8 @@ import (
 
 	"github.com/qw_pay/internal/account"
 	"github.com/qw_pay/internal/antifraud"
+	"github.com/qw_pay/internal/contextkeys"
+	"github.com/qw_pay/internal/response"
 )
 
 type Handler struct {
@@ -29,27 +31,26 @@ type createReq struct {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	userID := c.MustGet("user_id").(uuid.UUID)
+	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	var req createReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	from, err := h.acc.GetByID(c.Request.Context(), req.FromAccountID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Source account not found"})
+		response.Error(c, http.StatusNotFound, "Source account not found")
 		return
 	}
 	if from.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Not your account"})
+		response.Error(c, http.StatusForbidden, "Not your account")
 		return
 	}
 
 	if h.fraud != nil {
-		checkErr := error(nil)
 		var verdict *antifraud.Verdict
-		verdict, checkErr = h.fraud.Check(
+		verdict, err = h.fraud.Check(
 			c.Request.Context(),
 			req.FromAccountID.String(),
 			req.ToAccountID.String(),
@@ -58,17 +59,12 @@ func (h *Handler) Create(c *gin.Context) {
 			userID.String(),
 		)
 		switch {
-		case checkErr != nil:
-			log.Printf("[ANTIFRAUD] Check failed: %v — proceeding without anti-fraud", checkErr)
+		case err != nil:
+			log.Printf("[ANTIFRAUD] Check failed: %v — proceeding without anti-fraud", err)
 		case !verdict.Approved:
 			log.Printf("[ANTIFRAUD] Transaction BLOCKED: id=%s reason=%s risk=%d",
 				verdict.ID, verdict.Reason, verdict.RiskScore)
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":      "Transaction blocked by anti-fraud system",
-				"reason":     verdict.Reason,
-				"risk":       verdict.RiskScore,
-				"verdict_id": verdict.ID,
-			})
+			response.Error(c, http.StatusForbidden, "Transaction blocked by anti-fraud system")
 			return
 		default:
 			log.Printf("[ANTIFRAUD] Transaction APPROVED: id=%s risk=%d engine=%s",
@@ -78,25 +74,20 @@ func (h *Handler) Create(c *gin.Context) {
 
 	tx, err := h.svc.Create(c.Request.Context(), req.FromAccountID, req.ToAccountID, req.Amount, req.IdempotencyKey)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, tx)
+	response.Created(c, tx)
 }
 
 func (h *Handler) List(c *gin.Context) {
-	userID := c.MustGet("user_id").(uuid.UUID)
+	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	page := 1
 	pageSize := 20
 	transactions, total, err := h.svc.ListByUser(c.Request.Context(), userID, page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"transactions": transactions,
-		"total":        total,
-		"page":         page,
-		"page_size":    pageSize,
-	})
+	response.Paginated(c, transactions, page, pageSize, total)
 }
