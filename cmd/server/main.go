@@ -76,6 +76,8 @@ func main() {
 
 	r := gin.Default()
 
+	r.Use(middleware.RequestID())
+
 	r.StaticFile("/", "./web/index.html")
 	r.StaticFile("/demo", "./web/index.html")
 	r.Static("/static", "./web")
