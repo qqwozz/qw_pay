@@ -3,11 +3,11 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/qw_pay/internal/config"
+	"github.com/qw_pay/internal/logger"
 )
 
 var Pool *pgxpool.Pool
@@ -17,12 +17,14 @@ func Connect() {
 	var err error
 	Pool, err = pgxpool.New(ctx, config.C.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
+		logger.Error("unable to connect to database", "error", err)
+		panic(fmt.Sprintf("unable to connect to database: %v", err))
 	}
 	if err = Pool.Ping(ctx); err != nil {
-		log.Fatalf("Unable to ping database: %v", err)
+		logger.Error("unable to ping database", "error", err)
+		panic(fmt.Sprintf("unable to ping database: %v", err))
 	}
-	log.Println("Connected to PostgreSQL")
+	logger.Info("connected to PostgreSQL")
 }
 
 func ConnectWithDSN(dsn string) (*pgxpool.Pool, error) {

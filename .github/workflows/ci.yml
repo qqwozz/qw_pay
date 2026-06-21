@@ -20,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version-file: go.mod
 
       - name: Download dependencies
         run: go mod download
@@ -41,7 +41,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version-file: go.mod
 
       - name: Download dependencies
         run: go mod download
@@ -65,7 +65,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version-file: go.mod
 
       - name: Download dependencies
         run: go mod download
@@ -90,6 +90,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate version
+        id: version
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Download binary
         uses: actions/download-artifact@v4
         with:
@@ -99,10 +105,10 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0
-          name: v1.0.0
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
           body: |
-            ## QW Pay v1.0.0
+            ## QW Pay ${{ steps.version.outputs.tag }}
 
             ### Features
             - User registration with OTP verification
@@ -116,7 +122,7 @@ jobs:
             - Graceful shutdown with health check endpoint
 
             ### Tech Stack
-            - Go 1.22 with Gin framework
+            - Go with Gin framework
             - PostgreSQL 16 with pgx driver
             - Redis for anti-fraud queues
             - Docker + Docker Compose

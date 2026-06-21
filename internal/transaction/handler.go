@@ -3,6 +3,7 @@ package transaction
 import (
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -90,6 +91,16 @@ func (h *Handler) List(c *gin.Context) {
 	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	page := 1
 	pageSize := 20
+	if v := c.Query("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if v := c.Query("page_size"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			pageSize = n
+		}
+	}
 	transactions, total, err := h.svc.ListByUser(c.Request.Context(), userID, page, pageSize)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
