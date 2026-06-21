@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 import redis
 import subprocess
@@ -73,8 +74,6 @@ def orchestrator():
     while True:
         time.sleep(1)
 
-
-import threading
 
 if __name__ == "__main__":
     orchestrator()

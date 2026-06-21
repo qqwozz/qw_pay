@@ -70,6 +70,8 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 
 	for {
 		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		case <-deadline:
 			slog.Warn("antifraud timeout, defaulting to approved", "request_id", req.ID)
 			return &Verdict{

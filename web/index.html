@@ -241,6 +241,10 @@ function show(id, result, ok) {
   el.innerHTML = `<span class="${cls}">← HTTP ${result.status} (${result.ms}ms)</span>\n` + fmt(result.data);
 }
 
+function isSuccess(status) {
+  return status >= 200 && status < 300;
+}
+
 function toast(msg, ok) {
   const el = document.createElement('div');
   el.className = 'toast ' + (ok ? 'toast-ok' : 'toast-err');
@@ -267,7 +271,7 @@ async function doRegister() {
     password: document.getElementById('reg-pass').value
   });
   show('reg-out', r);
-  toast(r.status === 200 ? 'Регистрация успешна' : 'Ошибка регистрации', r.status === 200);
+  toast(isSuccess(r.status) ? 'Регистрация успешна' : 'Ошибка регистрации', isSuccess(r.status));
 }
 
 async function doVerify() {
@@ -276,7 +280,7 @@ async function doVerify() {
     otp_code: document.getElementById('otp-code').value
   });
   show('otp-out', r);
-  toast(r.status === 200 ? 'Аккаунт подтверждён' : 'OTP неверен', r.status === 200);
+  toast(isSuccess(r.status) ? 'Аккаунт подтверждён' : 'OTP неверен', isSuccess(r.status));
 }
 
 async function doLogin() {
@@ -300,7 +304,7 @@ async function doCreateAccount() {
     currency: document.getElementById('acc-currency').value
   });
   show('acc-out', r);
-  toast(r.status === 200 ? 'Счёт открыт! +100 бонус' : 'Ошибка', r.status === 200);
+  toast(isSuccess(r.status) ? 'Счёт открыт! +100 бонус' : 'Ошибка', isSuccess(r.status));
 }
 
 async function doListAccounts() {
@@ -323,7 +327,7 @@ async function doTransfer() {
     idempotency_key: crypto.randomUUID()
   });
   show('tx-out', r);
-  toast(r.status === 200 ? 'Перевод выполнен' : 'Ошибка перевода', r.status === 200);
+  toast(isSuccess(r.status) ? 'Перевод выполнен' : 'Ошибка перевода', isSuccess(r.status));
 }
 
 async function doListTransactions() {
@@ -341,7 +345,7 @@ async function doBlockAccount() {
   if (!id) { toast('Введите ID счёта', false); return; }
   const r = await req('POST', '/accounts/' + id + '/block');
   show('block-out', r);
-  toast(r.status === 200 ? 'Счёт заблокирован' : 'Ошибка блокировки', r.status === 200);
+  toast(isSuccess(r.status) ? 'Счёт заблокирован' : 'Ошибка блокировки', isSuccess(r.status));
 }
 
 async function doRawRequest() {
@@ -359,7 +363,7 @@ async function doBlockUser() {
   if (!id) { toast('Введите ID пользователя', false); return; }
   const r = await req('POST', '/antifraud/block-user', { user_id: id });
   show('af-out', r);
-  toast(r.status === 200 ? 'Пользователь заблокирован в AF' : 'Ошибка', r.status === 200);
+  toast(isSuccess(r.status) ? 'Пользователь заблокирован в AF' : 'Ошибка', isSuccess(r.status));
 }
 
 async function doBlockAccountAF() {
@@ -367,7 +371,7 @@ async function doBlockAccountAF() {
   if (!id) { toast('Введите ID счёта', false); return; }
   const r = await req('POST', '/antifraud/block-account', { account_id: id });
   show('af-out', r);
-  toast(r.status === 200 ? 'Счёт заблокирован в AF' : 'Ошибка', r.status === 200);
+  toast(isSuccess(r.status) ? 'Счёт заблокирован в AF' : 'Ошибка', isSuccess(r.status));
 }
 
 checkConn();
