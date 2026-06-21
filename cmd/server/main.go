@@ -81,6 +81,7 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.Use(middleware.CORS())
 	r.Use(middleware.RequestID())
 
 	r.StaticFile("/", "./web/index.html")
@@ -115,6 +116,7 @@ func main() {
 	v1 := r.Group("/api/v1")
 
 	authRateLimit := ratelimit.New(10, 20)
+	defer authRateLimit.Stop()
 	v1.POST("/register", authRateLimit.Middleware(), authH.Register)
 	v1.POST("/verify", authRateLimit.Middleware(), authH.VerifyOTP)
 	v1.POST("/login", authRateLimit.Middleware(), authH.Login)

@@ -22,13 +22,16 @@ type otpEntry struct {
 }
 
 type Service struct {
-	repo *UserRepository
-	mu   sync.RWMutex
-	otp  map[string]*otpEntry
+	repo  *UserRepository
+	mu    sync.RWMutex
+	otp   map[string]*otpEntry
+	ctx   context.Context
+	cancel context.CancelFunc
 }
 
 func NewService(repo *UserRepository) *Service {
 	s := &Service{repo: repo, otp: make(map[string]*otpEntry)}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	go s.cleanupOTP()
 	return s
 }
@@ -36,15 +39,24 @@ func NewService(repo *UserRepository) *Service {
 func (s *Service) cleanupOTP() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		s.mu.Lock()
-		for email, entry := range s.otp {
-			if time.Since(entry.createdAt) > time.Duration(config.C.OTPTTLSeconds)*time.Second {
-				delete(s.otp, email)
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.mu.Lock()
+			for email, entry := range s.otp {
+				if time.Since(entry.createdAt) > time.Duration(config.C.OTPTTLSeconds)*time.Second {
+					delete(s.otp, email)
+				}
 			}
+			s.mu.Unlock()
 		}
-		s.mu.Unlock()
 	}
+}
+
+func (s *Service) Stop() {
+	s.cancel()
 }
 
 func (s *Service) Register(ctx context.Context, email, phone, password string) (*model.User, error) {

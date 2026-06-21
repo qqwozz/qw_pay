@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ type Limiter struct {
 	rate    int
 	burst   int
 	cleanup time.Duration
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 type bucket struct {
@@ -22,28 +25,40 @@ type bucket struct {
 }
 
 func New(rate, burst int) *Limiter {
+	ctx, cancel := context.WithCancel(context.Background())
 	l := &Limiter{
 		clients: make(map[string]*bucket),
 		rate:    rate,
 		burst:   burst,
 		cleanup: 5 * time.Minute,
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 	go l.cleanupLoop()
 	return l
 }
 
+func (l *Limiter) Stop() {
+	l.cancel()
+}
+
 func (l *Limiter) cleanupLoop() {
 	ticker := time.NewTicker(l.cleanup)
 	defer ticker.Stop()
-	for range ticker.C {
-		l.mu.Lock()
-		now := time.Now()
-		for ip, b := range l.clients {
-			if now.Sub(b.lastReset) > l.cleanup {
-				delete(l.clients, ip)
+	for {
+		select {
+		case <-l.ctx.Done():
+			return
+		case <-ticker.C:
+			l.mu.Lock()
+			now := time.Now()
+			for ip, b := range l.clients {
+				if now.Sub(b.lastReset) > l.cleanup {
+					delete(l.clients, ip)
+				}
 			}
+			l.mu.Unlock()
 		}
-		l.mu.Unlock()
 	}
 }
 
