@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"github.com/qw_pay/internal/contextkeys"
 	"github.com/qw_pay/internal/response"
@@ -39,7 +38,11 @@ func (h *RefreshHandler) Refresh(c *gin.Context) {
 }
 
 func (h *RefreshHandler) Logout(c *gin.Context) {
-	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
+	userID, ok := contextkeys.GetUserID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
 	if err := h.svc.Logout(c.Request.Context(), userID); err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())

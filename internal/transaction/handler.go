@@ -33,7 +33,11 @@ type createReq struct {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
+	userID, ok := contextkeys.GetUserID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	var req createReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
@@ -89,7 +93,11 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
+	userID, ok := contextkeys.GetUserID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	page := 1
 	pageSize := 20
 	if p := c.Query("page"); p != "" {

@@ -23,7 +23,11 @@ type createReq struct {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
+	userID, ok := contextkeys.GetUserID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	var req createReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
@@ -38,7 +42,11 @@ func (h *Handler) Create(c *gin.Context) {
 }
 
 func (h *Handler) List(c *gin.Context) {
-	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
+	userID, ok := contextkeys.GetUserID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	accounts, err := h.svc.ListByUser(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
@@ -48,7 +56,11 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 func (h *Handler) Block(c *gin.Context) {
-	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
+	userID, ok := contextkeys.GetUserID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	accountID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, "Invalid account ID")
