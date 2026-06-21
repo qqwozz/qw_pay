@@ -49,3 +49,6 @@ tmp/
 
 # Build artifacts
 antifraud/cpp/fraud_engine
+
+# AI assistants
+AGENTS.md
