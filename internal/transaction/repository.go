@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/errors"
 	"github.com/qw_pay/internal/model"
@@ -35,7 +36,7 @@ func (r *Repository) GetByIDempotencyKey(ctx context.Context, key string) (*mode
 	return tx, nil
 }
 
-func (r *Repository) Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount float64, sourceCurrency, targetCurrency string, exchangeRate *float64) (*model.Transaction, error) {
+func (r *Repository) Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount decimal.Decimal, sourceCurrency, targetCurrency string, exchangeRate *decimal.Decimal) (*model.Transaction, error) {
 	t := &model.Transaction{}
 	err := tx.QueryRow(ctx,
 		`INSERT INTO transactions (idempotency_key, from_account_id, to_account_id, amount, currency, source_currency, exchange_rate_used, status)
@@ -51,7 +52,7 @@ func (r *Repository) Create(ctx context.Context, tx pgx.Tx, key string, fromID, 
 	return t, nil
 }
 
-func (r *Repository) DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error {
+func (r *Repository) DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, version int) error {
 	tag, err := tx.Exec(ctx,
 		`UPDATE accounts SET balance=balance-$1, version=version+1, updated_at=NOW()
 		 WHERE id=$2 AND version=$3 AND status='ACTIVE'`,
@@ -66,7 +67,7 @@ func (r *Repository) DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid
 	return nil
 }
 
-func (r *Repository) CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error {
+func (r *Repository) CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, version int) error {
 	tag, err := tx.Exec(ctx,
 		`UPDATE accounts SET balance=balance+$1, version=version+1, updated_at=NOW()
 		 WHERE id=$2 AND version=$3 AND status='ACTIVE'`,

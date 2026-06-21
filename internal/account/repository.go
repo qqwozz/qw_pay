@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/model"
 )
@@ -18,7 +19,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Create(ctx context.Context, userID uuid.UUID, currency string, balance float64) (*model.Account, error) {
+func (r *Repository) Create(ctx context.Context, userID uuid.UUID, currency string, balance decimal.Decimal) (*model.Account, error) {
 	acc := &model.Account{}
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO accounts (user_id, currency, balance, version, status)
@@ -81,15 +82,15 @@ func (r *Repository) Block(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *Repository) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (float64, error) {
-	var sum float64
+func (r *Repository) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (decimal.Decimal, error) {
+	var sum decimal.Decimal
 	err := r.db.QueryRow(ctx,
 		`SELECT COALESCE(SUM(amount), 0) FROM transactions
 		 WHERE from_account_id=$1 AND created_at >= DATE_TRUNC('day', NOW())
 		 AND status='EXECUTED'`, accountID,
 	).Scan(&sum)
 	if err != nil {
-		return 0, fmt.Errorf("get daily transfer sum: %w", err)
+		return decimal.Zero, fmt.Errorf("get daily transfer sum: %w", err)
 	}
 	return sum, nil
 }

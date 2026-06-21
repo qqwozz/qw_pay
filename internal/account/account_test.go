@@ -6,14 +6,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/errors"
 	"github.com/qw_pay/internal/model"
 )
 
 func TestServiceConstants(t *testing.T) {
-	if WelcomeBonus != 100.0 {
-		t.Errorf("expected WelcomeBonus 100.0, got %f", WelcomeBonus)
+	if !WelcomeBonus.Equal(decimal.NewFromInt(100)) {
+		t.Errorf("expected WelcomeBonus 100, got %s", WelcomeBonus)
 	}
 }
 
@@ -30,7 +31,7 @@ func TestNewService(t *testing.T) {
 
 type mockAccountReader struct {
 	accounts map[uuid.UUID]*model.Account
-	dailySum float64
+	dailySum decimal.Decimal
 }
 
 func (m *mockAccountReader) GetByID(ctx context.Context, id uuid.UUID) (*model.Account, error) {
@@ -40,7 +41,7 @@ func (m *mockAccountReader) GetByID(ctx context.Context, id uuid.UUID) (*model.A
 	return nil, errors.ErrNotFound
 }
 
-func (m *mockAccountReader) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (float64, error) {
+func (m *mockAccountReader) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (decimal.Decimal, error) {
 	return m.dailySum, nil
 }
 
@@ -56,7 +57,7 @@ func TestAccountJSON(t *testing.T) {
 		ID:        uuid.New(),
 		UserID:    uuid.New(),
 		Currency:  model.CurrencyUSD,
-		Balance:   1000.00,
+		Balance:   decimal.NewFromFloat(1000.00),
 		Version:   5,
 		Status:    model.StatusActive,
 		CreatedAt: time.Now(),
@@ -66,7 +67,7 @@ func TestAccountJSON(t *testing.T) {
 	if acc.Currency != model.CurrencyUSD {
 		t.Error("currency should be USD")
 	}
-	if acc.Balance != 1000.00 {
+	if !acc.Balance.Equal(decimal.NewFromFloat(1000.00)) {
 		t.Error("balance should be 1000.00")
 	}
 	if acc.Version != 5 {
@@ -87,12 +88,12 @@ func TestMockAccountReader(t *testing.T) {
 				ID:       accID,
 				UserID:   userID,
 				Currency: model.CurrencyUSD,
-				Balance:  500.0,
+				Balance:  decimal.NewFromFloat(500.0),
 				Version:  1,
 				Status:   model.StatusActive,
 			},
 		},
-		dailySum: 100.0,
+		dailySum: decimal.NewFromFloat(100.0),
 	}
 
 	t.Run("GetByID found", func(t *testing.T) {
@@ -117,8 +118,8 @@ func TestMockAccountReader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if sum != 100.0 {
-			t.Errorf("expected 100.0, got %f", sum)
+		if !sum.Equal(decimal.NewFromFloat(100.0)) {
+			t.Errorf("expected 100.0, got %s", sum)
 		}
 	})
 }

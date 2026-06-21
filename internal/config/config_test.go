@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"testing"
+
+	"github.com/shopspring/decimal"
 )
 
 func TestLoad_DefaultValues(t *testing.T) {
@@ -39,11 +41,11 @@ func TestLoad_DefaultValues(t *testing.T) {
 	if C.OTPTTLSeconds != 300 {
 		t.Errorf("expected OTP TTL 300, got %d", C.OTPTTLSeconds)
 	}
-	if C.MaxTransferAmount != 10_000_000 {
-		t.Errorf("expected max transfer 10000000, got %f", C.MaxTransferAmount)
+	if !C.MaxTransferAmount.Equal(decimal.NewFromInt(10_000_000)) {
+		t.Errorf("expected max transfer 10000000, got %s", C.MaxTransferAmount)
 	}
-	if C.DailyLimit != 50_000_000 {
-		t.Errorf("expected daily limit 50000000, got %f", C.DailyLimit)
+	if !C.DailyLimit.Equal(decimal.NewFromInt(50_000_000)) {
+		t.Errorf("expected daily limit 50000000, got %s", C.DailyLimit)
 	}
 }
 
@@ -142,30 +144,32 @@ func TestGetEnvInt(t *testing.T) {
 	})
 }
 
-func TestGetEnvFloat(t *testing.T) {
-	t.Run("returns parsed float", func(t *testing.T) {
-		_ = os.Setenv("TEST_FLOAT_KEY", "3.14")
-		defer func() { _ = os.Unsetenv("TEST_FLOAT_KEY") }()
-		result := getEnvFloat("TEST_FLOAT_KEY", 0)
-		if result != 3.14 {
-			t.Errorf("expected 3.14, got %f", result)
+func TestGetEnvDecimal(t *testing.T) {
+	t.Run("returns parsed decimal", func(t *testing.T) {
+		_ = os.Setenv("TEST_DECIMAL_KEY", "3.14")
+		defer func() { _ = os.Unsetenv("TEST_DECIMAL_KEY") }()
+		result := getEnvDecimal("TEST_DECIMAL_KEY", decimal.Zero)
+		if !result.Equal(decimal.RequireFromString("3.14")) {
+			t.Errorf("expected 3.14, got %s", result)
 		}
 	})
 
-	t.Run("returns fallback for invalid float", func(t *testing.T) {
-		_ = os.Setenv("TEST_FLOAT_KEY2", "not-a-float")
-		defer func() { _ = os.Unsetenv("TEST_FLOAT_KEY2") }()
-		result := getEnvFloat("TEST_FLOAT_KEY2", 1.0)
-		if result != 1.0 {
-			t.Errorf("expected 1.0, got %f", result)
+	t.Run("returns fallback for invalid decimal", func(t *testing.T) {
+		_ = os.Setenv("TEST_DECIMAL_KEY2", "not-a-decimal")
+		defer func() { _ = os.Unsetenv("TEST_DECIMAL_KEY2") }()
+		fallback := decimal.NewFromInt(1)
+		result := getEnvDecimal("TEST_DECIMAL_KEY2", fallback)
+		if !result.Equal(fallback) {
+			t.Errorf("expected %s, got %s", fallback, result)
 		}
 	})
 
 	t.Run("returns fallback when not set", func(t *testing.T) {
-		_ = os.Unsetenv("TEST_FLOAT_KEY3")
-		result := getEnvFloat("TEST_FLOAT_KEY3", 2.5)
-		if result != 2.5 {
-			t.Errorf("expected 2.5, got %f", result)
+		_ = os.Unsetenv("TEST_DECIMAL_KEY3")
+		fallback := decimal.RequireFromString("2.5")
+		result := getEnvDecimal("TEST_DECIMAL_KEY3", fallback)
+		if !result.Equal(fallback) {
+			t.Errorf("expected %s, got %s", fallback, result)
 		}
 	})
 }
@@ -176,8 +180,8 @@ func TestConfigValidate(t *testing.T) {
 		JWTSecret:         "secret",
 		JWTExpireHours:    24,
 		OTPTTLSeconds:     300,
-		MaxTransferAmount: 10000000,
-		DailyLimit:        50000000,
+		MaxTransferAmount: decimal.NewFromInt(10000000),
+		DailyLimit:        decimal.NewFromInt(50000000),
 		ServerPort:        "8080",
 		RedisAddr:         "localhost:6379",
 	}

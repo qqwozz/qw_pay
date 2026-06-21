@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/config"
 	"github.com/qw_pay/internal/errors"
@@ -14,26 +15,26 @@ import (
 
 func init() {
 	config.C = &config.Config{
-		MaxTransferAmount: 10_000_000,
-		DailyLimit:        50_000_000,
+		MaxTransferAmount: decimal.NewFromInt(10_000_000),
+		DailyLimit:        decimal.NewFromInt(50_000_000),
 	}
 }
 
 func TestExchangeRates(t *testing.T) {
-	expected := map[string]float64{
-		"RUB_USD": 0.011,
-		"USD_RUB": 90.91,
-		"RUB_EUR": 0.010,
-		"EUR_RUB": 100.0,
-		"USD_EUR": 0.92,
-		"EUR_USD": 1.09,
+	expected := map[string]decimal.Decimal{
+		"RUB_USD": decimal.RequireFromString("0.011"),
+		"USD_RUB": decimal.RequireFromString("90.91"),
+		"RUB_EUR": decimal.RequireFromString("0.010"),
+		"EUR_RUB": decimal.RequireFromString("100.0"),
+		"USD_EUR": decimal.RequireFromString("0.92"),
+		"EUR_USD": decimal.RequireFromString("1.09"),
 	}
 
 	for key, expectedRate := range expected {
 		if rate, ok := exchangeRates[key]; !ok {
 			t.Errorf("missing exchange rate for %s", key)
-		} else if rate != expectedRate {
-			t.Errorf("exchange rate %s: expected %f, got %f", key, expectedRate, rate)
+		} else if !rate.Equal(expectedRate) {
+			t.Errorf("exchange rate %s: expected %s, got %s", key, expectedRate, rate)
 		}
 	}
 }
@@ -67,7 +68,7 @@ type mockAccount struct {
 
 type mockAccountService struct {
 	accounts map[uuid.UUID]*mockAccount
-	dailySum float64
+	dailySum decimal.Decimal
 }
 
 func (m *mockAccountService) GetByID(ctx context.Context, id uuid.UUID) (*model.Account, error) {
@@ -77,7 +78,7 @@ func (m *mockAccountService) GetByID(ctx context.Context, id uuid.UUID) (*model.
 	return nil, errors.ErrNotFound
 }
 
-func (m *mockAccountService) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (float64, error) {
+func (m *mockAccountService) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (decimal.Decimal, error) {
 	return m.dailySum, nil
 }
 
@@ -92,15 +93,15 @@ func (m *mockTxRepo) GetByIDempotencyKey(ctx context.Context, key string) (*mode
 	return nil, errors.ErrNotFound
 }
 
-func (m *mockTxRepo) Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount float64, sourceCurrency, targetCurrency string, exchangeRate *float64) (*model.Transaction, error) {
+func (m *mockTxRepo) Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount decimal.Decimal, sourceCurrency, targetCurrency string, exchangeRate *decimal.Decimal) (*model.Transaction, error) {
 	return nil, nil
 }
 
-func (m *mockTxRepo) DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error {
+func (m *mockTxRepo) DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, version int) error {
 	return nil
 }
 
-func (m *mockTxRepo) CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error {
+func (m *mockTxRepo) CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, version int) error {
 	return nil
 }
 
@@ -114,11 +115,11 @@ func TestService_Create_SourceNotFound(t *testing.T) {
 
 	mockAcc := &mockAccountService{
 		accounts: map[uuid.UUID]*mockAccount{},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 100, "key4")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key4")
 	if err == nil {
 		t.Error("expected error for unknown source account")
 	}
@@ -132,11 +133,11 @@ func TestService_Create_TargetNotFound(t *testing.T) {
 		accounts: map[uuid.UUID]*mockAccount{
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 100, "key5")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key5")
 	if err == nil {
 		t.Error("expected error for unknown target account")
 	}
@@ -149,11 +150,11 @@ func TestService_Create_SameAccount(t *testing.T) {
 		accounts: map[uuid.UUID]*mockAccount{
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, fromID, 100, "key3")
+	_, err := svc.Create(context.Background(), fromID, fromID, decimal.NewFromInt(100), "key3")
 	if err == nil {
 		t.Error("expected error for same account transfer")
 	}
@@ -168,11 +169,11 @@ func TestService_Create_BlockedAccount(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusBlocked, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 100, "key-blocked")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-blocked")
 	if err == nil {
 		t.Error("expected error for blocked source account")
 	}
@@ -187,11 +188,11 @@ func TestService_Create_BlockedTargetAccount(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusBlocked, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 100, "key-blocked2")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-blocked2")
 	if err == nil {
 		t.Error("expected error for blocked target account")
 	}
@@ -206,11 +207,11 @@ func TestService_Create_MaxAmount(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 20_000_000, "key-max")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(20_000_000), "key-max")
 	if err == nil {
 		t.Error("expected error for amount exceeding max transfer limit")
 	}
@@ -225,11 +226,11 @@ func TestService_Create_DailyLimit(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 49_999_999,
+		dailySum: decimal.RequireFromString("49999999"),
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 10, "key-daily")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(10), "key-daily")
 	if err == nil {
 		t.Error("expected error for daily limit exceeded")
 	}
@@ -244,11 +245,11 @@ func TestService_Create_NoExchangeRate(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: "GBP"}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 100, "key-rate")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-rate")
 	if err == nil {
 		t.Error("expected error for missing exchange rate")
 	}
@@ -263,11 +264,11 @@ func TestService_Create_ZeroAmount(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, 0, "key-zero")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.Zero, "key-zero")
 	if err == nil {
 		t.Error("expected error for zero amount")
 	}
@@ -282,11 +283,11 @@ func TestService_Create_NegativeAmount(t *testing.T) {
 			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
 		},
-		dailySum: 0,
+		dailySum: decimal.Zero,
 	}
 
 	svc := NewService(nil, &mockTxRepo{}, mockAcc)
-	_, err := svc.Create(context.Background(), fromID, toID, -10, "key-neg")
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(-10), "key-neg")
 	if err == nil {
 		t.Error("expected error for negative amount")
 	}
@@ -330,13 +331,13 @@ func TestTransactionModel(t *testing.T) {
 		IdempotencyKey: "test-key",
 		FromAccountID:  uuid.New(),
 		ToAccountID:    uuid.New(),
-		Amount:         100.0,
+		Amount:         decimal.NewFromInt(100),
 		Currency:       "RUB",
 		Status:         model.TxStatusExecuted,
 	}
 
-	if tx.Amount != 100.0 {
-		t.Error("amount should be 100.0")
+	if !tx.Amount.Equal(decimal.NewFromInt(100)) {
+		t.Error("amount should be 100")
 	}
 	if tx.Currency != "RUB" {
 		t.Error("currency should be RUB")

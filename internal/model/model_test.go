@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 func TestAccountStatus(t *testing.T) {
@@ -37,7 +38,7 @@ func TestAccountStruct(t *testing.T) {
 		ID:        id,
 		UserID:    userID,
 		Currency:  CurrencyUSD,
-		Balance:   100.50,
+		Balance:   decimal.RequireFromString("100.50"),
 		Version:   1,
 		Status:    StatusActive,
 		CreatedAt: now,
@@ -53,7 +54,7 @@ func TestAccountStruct(t *testing.T) {
 	if acc.Currency != CurrencyUSD {
 		t.Error("Currency mismatch")
 	}
-	if acc.Balance != 100.50 {
+	if !acc.Balance.Equal(decimal.RequireFromString("100.50")) {
 		t.Error("Balance mismatch")
 	}
 	if acc.Version != 1 {
@@ -82,14 +83,14 @@ func TestTransactionStruct(t *testing.T) {
 	toID := uuid.New()
 	now := time.Now()
 	srcCurrency := "USD"
-	exchangeRate := 90.91
+	exchangeRate := decimal.RequireFromString("90.91")
 
 	tx := Transaction{
 		ID:             id,
 		IdempotencyKey: "key-123",
 		FromAccountID:  fromID,
 		ToAccountID:    toID,
-		Amount:         100.0,
+		Amount:         decimal.NewFromInt(100),
 		Currency:       "RUB",
 		SourceCurrency: &srcCurrency,
 		ExchangeRate:   &exchangeRate,
@@ -109,7 +110,7 @@ func TestTransactionStruct(t *testing.T) {
 	if tx.ToAccountID != toID {
 		t.Error("ToAccountID mismatch")
 	}
-	if tx.Amount != 100.0 {
+	if !tx.Amount.Equal(decimal.NewFromInt(100)) {
 		t.Error("Amount mismatch")
 	}
 	if tx.Currency != "RUB" {
@@ -118,7 +119,7 @@ func TestTransactionStruct(t *testing.T) {
 	if tx.SourceCurrency == nil || *tx.SourceCurrency != "USD" {
 		t.Error("SourceCurrency mismatch")
 	}
-	if tx.ExchangeRate == nil || *tx.ExchangeRate != 90.91 {
+	if tx.ExchangeRate == nil || !tx.ExchangeRate.Equal(decimal.RequireFromString("90.91")) {
 		t.Error("ExchangeRate mismatch")
 	}
 	if tx.Status != TxStatusExecuted {
@@ -129,7 +130,7 @@ func TestTransactionStruct(t *testing.T) {
 func TestTransactionOptionalFields(t *testing.T) {
 	tx := Transaction{
 		ID:        uuid.New(),
-		Amount:    50.0,
+		Amount:    decimal.NewFromInt(50),
 		Currency:  "RUB",
 		Status:    TxStatusPending,
 		CreatedAt: time.Now(),

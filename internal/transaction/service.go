@@ -8,31 +8,32 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/config"
 	apperr "github.com/qw_pay/internal/errors"
 	"github.com/qw_pay/internal/model"
 )
 
-var exchangeRates = map[string]float64{
-	"RUB_USD": 0.011,
-	"USD_RUB": 90.91,
-	"RUB_EUR": 0.010,
-	"EUR_RUB": 100.0,
-	"USD_EUR": 0.92,
-	"EUR_USD": 1.09,
+var exchangeRates = map[string]decimal.Decimal{
+	"RUB_USD": decimal.RequireFromString("0.011"),
+	"USD_RUB": decimal.RequireFromString("90.91"),
+	"RUB_EUR": decimal.RequireFromString("0.010"),
+	"EUR_RUB": decimal.RequireFromString("100.0"),
+	"USD_EUR": decimal.RequireFromString("0.92"),
+	"EUR_USD": decimal.RequireFromString("1.09"),
 }
 
 type accountReader interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Account, error)
-	GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (float64, error)
+	GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (decimal.Decimal, error)
 }
 
 type txRepository interface {
 	GetByIDempotencyKey(ctx context.Context, key string) (*model.Transaction, error)
-	Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount float64, sourceCurrency, targetCurrency string, exchangeRate *float64) (*model.Transaction, error)
-	DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error
-	CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount float64, version int) error
+	Create(ctx context.Context, tx pgx.Tx, key string, fromID, toID uuid.UUID, amount decimal.Decimal, sourceCurrency, targetCurrency string, exchangeRate *decimal.Decimal) (*model.Transaction, error)
+	DebitAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, version int) error
+	CreditAccount(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, amount decimal.Decimal, version int) error
 	ListByUser(ctx context.Context, userID uuid.UUID, offset, limit int) ([]model.Transaction, int, error)
 }
 
@@ -46,7 +47,7 @@ func NewService(db *pgxpool.Pool, repo txRepository, acc accountReader) *Service
 	return &Service{db: db, repo: repo, acc: acc}
 }
 
-func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount float64, idempotencyKey string) (*model.Transaction, error) {
+func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount decimal.Decimal, idempotencyKey string) (*model.Transaction, error) {
 	existing, err := s.repo.GetByIDempotencyKey(ctx, idempotencyKey)
 	if err == nil {
 		return existing, nil
@@ -64,11 +65,11 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 	if from.Status != model.StatusActive || to.Status != model.StatusActive {
 		return nil, apperr.Forbidden("account is blocked")
 	}
-	if amount <= 0 {
+	if amount.LessThanOrEqual(decimal.Zero) {
 		return nil, apperr.BadRequest("amount must be positive")
 	}
-	if amount > config.C.MaxTransferAmount {
-		return nil, apperr.BadRequest(fmt.Sprintf("amount exceeds max transfer limit of %.2f", config.C.MaxTransferAmount))
+	if amount.GreaterThan(config.C.MaxTransferAmount) {
+		return nil, apperr.BadRequest(fmt.Sprintf("amount exceeds max transfer limit of %s", config.C.MaxTransferAmount))
 	}
 	if fromID == toID {
 		return nil, apperr.BadRequest("cannot transfer to the same account")
@@ -78,14 +79,15 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 	if err != nil {
 		return nil, apperr.Wrap(err, "failed to get daily transfer sum")
 	}
-	if dailySum+amount > config.C.DailyLimit {
+	if dailySum.Add(amount).GreaterThan(config.C.DailyLimit) {
 		return nil, apperr.BadRequest("daily transfer limit exceeded")
 	}
 
 	sourceCurrency := string(from.Currency)
 	targetCurrency := string(to.Currency)
-	var exchangeRate *float64
+	var exchangeRate *decimal.Decimal
 
+	creditAmount := amount
 	if sourceCurrency != targetCurrency {
 		key := sourceCurrency + "_" + targetCurrency
 		rate, ok := exchangeRates[key]
@@ -93,6 +95,7 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 			return nil, apperr.BadRequest(fmt.Sprintf("no exchange rate for %s to %s", sourceCurrency, targetCurrency))
 		}
 		exchangeRate = &rate
+		creditAmount = amount.Mul(rate)
 	}
 
 	dbTx, err := s.db.Begin(ctx)
@@ -110,7 +113,7 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount flo
 		return nil, apperr.Wrap(err, "failed to debit source account")
 	}
 
-	if err := s.repo.CreditAccount(ctx, dbTx, toID, amount, to.Version); err != nil {
+	if err := s.repo.CreditAccount(ctx, dbTx, toID, creditAmount, to.Version); err != nil {
 		return nil, apperr.Wrap(err, "failed to credit target account")
 	}
 

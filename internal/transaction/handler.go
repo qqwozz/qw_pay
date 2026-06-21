@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/account"
 	"github.com/qw_pay/internal/antifraud"
@@ -25,10 +26,10 @@ func NewHandler(svc *Service, acc *account.Service, fraud *antifraud.Client) *Ha
 }
 
 type createReq struct {
-	FromAccountID  uuid.UUID `json:"from_account_id" binding:"required"`
-	ToAccountID    uuid.UUID `json:"to_account_id" binding:"required"`
-	Amount         float64   `json:"amount" binding:"required,gt=0"`
-	IdempotencyKey string    `json:"idempotency_key" binding:"required"`
+	FromAccountID  uuid.UUID       `json:"from_account_id" binding:"required"`
+	ToAccountID    uuid.UUID       `json:"to_account_id" binding:"required"`
+	Amount         decimal.Decimal `json:"amount" binding:"required"`
+	IdempotencyKey string          `json:"idempotency_key" binding:"required"`
 }
 
 func (h *Handler) Create(c *gin.Context) {
@@ -55,7 +56,7 @@ func (h *Handler) Create(c *gin.Context) {
 			c.Request.Context(),
 			req.FromAccountID.String(),
 			req.ToAccountID.String(),
-			req.Amount,
+			req.Amount.InexactFloat64(),
 			string(from.Currency),
 			userID.String(),
 		)
@@ -91,14 +92,14 @@ func (h *Handler) List(c *gin.Context) {
 	userID := c.MustGet(string(contextkeys.KeyUserID)).(uuid.UUID)
 	page := 1
 	pageSize := 20
-	if v := c.Query("page"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			page = n
+	if p := c.Query("page"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 {
+			page = v
 		}
 	}
-	if v := c.Query("page_size"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			pageSize = n
+	if ps := c.Query("page_size"); ps != "" {
+		if v, err := strconv.Atoi(ps); err == nil && v > 0 && v <= 100 {
+			pageSize = v
 		}
 	}
 	transactions, total, err := h.svc.ListByUser(c.Request.Context(), userID, page, pageSize)

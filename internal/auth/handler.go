@@ -10,11 +10,12 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc       *Service
+	refreshSvc *RefreshTokenService
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, refreshSvc *RefreshTokenService) *Handler {
+	return &Handler{svc: svc, refreshSvc: refreshSvc}
 }
 
 type registerReq struct {
@@ -85,14 +86,16 @@ func (h *Handler) Login(c *gin.Context) {
 		response.Error(c, http.StatusForbidden, "Account not verified")
 		return
 	}
-	token, err := h.svc.CreateToken(user.ID)
+	pair, err := h.refreshSvc.CreateTokenPair(c.Request.Context(), user.ID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to create token")
 		return
 	}
 	response.OK(c, gin.H{
-		"access_token": token,
-		"token_type":   "bearer",
-		"user_id":      user.ID,
+		"access_token":  pair.AccessToken,
+		"refresh_token": pair.RefreshToken,
+		"token_type":    pair.TokenType,
+		"expires_in":    pair.ExpiresIn,
+		"user_id":       user.ID,
 	})
 }

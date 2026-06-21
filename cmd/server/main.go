@@ -63,14 +63,17 @@ func main() {
 	userRepo := auth.NewUserRepository(database.Pool)
 	accountRepo := account.NewRepository(database.Pool)
 	txRepo := transaction.NewRepository(database.Pool)
+	refreshTokenRepo := auth.NewRefreshTokenRepository(database.Pool)
 
 	authSvc := auth.NewService(userRepo)
 	accountSvc := account.NewService(accountRepo)
 	txSvc := transaction.NewService(database.Pool, txRepo, accountSvc)
+	refreshTokenSvc := auth.NewRefreshTokenService(refreshTokenRepo)
 
-	authH := auth.NewHandler(authSvc)
+	authH := auth.NewHandler(authSvc, refreshTokenSvc)
 	accountH := account.NewHandler(accountSvc)
 	txH := transaction.NewHandler(txSvc, accountSvc, fraudClient)
+	refreshH := auth.NewRefreshHandler(refreshTokenSvc)
 
 	var afH *antifraud.Handler
 	if fraudClient != nil {
@@ -115,9 +118,11 @@ func main() {
 	v1.POST("/register", authRateLimit.Middleware(), authH.Register)
 	v1.POST("/verify", authRateLimit.Middleware(), authH.VerifyOTP)
 	v1.POST("/login", authRateLimit.Middleware(), authH.Login)
+	v1.POST("/refresh", authRateLimit.Middleware(), refreshH.Refresh)
 
 	authGroup := v1.Group("")
 	authGroup.Use(middleware.AuthRequired())
+	authGroup.POST("/logout", refreshH.Logout)
 	authGroup.POST("/accounts", accountH.Create)
 	authGroup.GET("/accounts", accountH.List)
 	authGroup.POST("/accounts/:id/block", accountH.Block)

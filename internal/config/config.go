@@ -6,15 +6,17 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
+	"github.com/shopspring/decimal"
 )
 
 type Config struct {
 	DatabaseURL       string
 	JWTSecret         string
 	JWTExpireHours    int
+	RefreshExpireDays int
 	OTPTTLSeconds     int
-	MaxTransferAmount float64
-	DailyLimit        float64
+	MaxTransferAmount decimal.Decimal
+	DailyLimit        decimal.Decimal
 	ServerPort        string
 	RedisAddr         string
 }
@@ -25,14 +27,16 @@ func Load() {
 	_ = godotenv.Load()
 
 	jwtExpireHours := getEnvInt("JWT_EXPIRE_HOURS", 24)
+	refreshExpireDays := getEnvInt("REFRESH_EXPIRE_DAYS", 30)
 	otpTTLSeconds := getEnvInt("OTP_TTL_SECONDS", 300)
-	maxTransfer := getEnvFloat("MAX_TRANSFER_AMOUNT", 10_000_000)
-	dailyLimit := getEnvFloat("DAILY_LIMIT", 50_000_000)
+	maxTransfer := getEnvDecimal("MAX_TRANSFER_AMOUNT", decimal.NewFromInt(10_000_000))
+	dailyLimit := getEnvDecimal("DAILY_LIMIT", decimal.NewFromInt(50_000_000))
 
 	C = &Config{
 		DatabaseURL:       getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/qw_pay?sslmode=disable"),
 		JWTSecret:         getEnv("JWT_SECRET", "change-me-in-production"),
 		JWTExpireHours:    jwtExpireHours,
+		RefreshExpireDays: refreshExpireDays,
 		OTPTTLSeconds:     otpTTLSeconds,
 		MaxTransferAmount: maxTransfer,
 		DailyLimit:        dailyLimit,
@@ -58,10 +62,10 @@ func (c *Config) validate() error {
 	if c.OTPTTLSeconds <= 0 {
 		return fmt.Errorf("OTP_TTL_SECONDS must be positive")
 	}
-	if c.MaxTransferAmount <= 0 {
+	if c.MaxTransferAmount.LessThanOrEqual(decimal.Zero) {
 		return fmt.Errorf("MAX_TRANSFER_AMOUNT must be positive")
 	}
-	if c.DailyLimit <= 0 {
+	if c.DailyLimit.LessThanOrEqual(decimal.Zero) {
 		return fmt.Errorf("DAILY_LIMIT must be positive")
 	}
 	if c.ServerPort == "" {
@@ -86,10 +90,10 @@ func getEnvInt(key string, fallback int) int {
 	return fallback
 }
 
-func getEnvFloat(key string, fallback float64) float64 {
+func getEnvDecimal(key string, fallback decimal.Decimal) decimal.Decimal {
 	if v := os.Getenv(key); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f
+		if d, err := decimal.NewFromString(v); err == nil {
+			return d
 		}
 	}
 	return fallback

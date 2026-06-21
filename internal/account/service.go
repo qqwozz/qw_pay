@@ -5,11 +5,12 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/qw_pay/internal/model"
 )
 
-const WelcomeBonus = 100.0
+var WelcomeBonus = decimal.NewFromInt(100)
 
 type Service struct {
 	repo *Repository
@@ -40,6 +41,6 @@ func (s *Service) Block(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Block(ctx, id)
 }
 
-func (s *Service) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (float64, error) {
+func (s *Service) GetDailyTransferSum(ctx context.Context, accountID uuid.UUID) (decimal.Decimal, error) {
 	return s.repo.GetDailyTransferSum(ctx, accountID)
 }
