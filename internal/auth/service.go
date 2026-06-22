@@ -83,7 +83,10 @@ func (s *Service) Register(ctx context.Context, email, phone, password string) (
 func (s *Service) GenerateOTP() string {
 	code := ""
 	for i := 0; i < 6; i++ {
-		n, _ := rand.Int(rand.Reader, big.NewInt(10))
+		n, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			panic(fmt.Sprintf("failed to generate OTP digit: %v", err))
+		}
 		code += fmt.Sprintf("%d", n.Int64())
 	}
 	return code
