@@ -14,8 +14,8 @@ func init() {
 }
 
 func TestCORS_Preflight(t *testing.T) {
-	os.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080")
-	defer os.Unsetenv("CORS_ALLOWED_ORIGINS")
+	_ = os.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080")
+	defer func() { _ = os.Unsetenv("CORS_ALLOWED_ORIGINS") }()
 
 	r := gin.New()
 	r.Use(CORS())
@@ -24,7 +24,7 @@ func TestCORS_Preflight(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("OPTIONS", "/test", nil)
+	req, _ := http.NewRequest("OPTIONS", "/test", http.NoBody)
 	req.Header.Set("Origin", "http://localhost:8080")
 	r.ServeHTTP(w, req)
 
@@ -37,8 +37,8 @@ func TestCORS_Preflight(t *testing.T) {
 }
 
 func TestCORS_AllowedOrigin(t *testing.T) {
-	os.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080")
-	defer os.Unsetenv("CORS_ALLOWED_ORIGINS")
+	_ = os.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080")
+	defer func() { _ = os.Unsetenv("CORS_ALLOWED_ORIGINS") }()
 
 	r := gin.New()
 	r.Use(CORS())
@@ -47,7 +47,7 @@ func TestCORS_AllowedOrigin(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/test", nil)
+	req, _ := http.NewRequest("GET", "/test", http.NoBody)
 	req.Header.Set("Origin", "http://localhost:8080")
 	r.ServeHTTP(w, req)
 
@@ -57,8 +57,8 @@ func TestCORS_AllowedOrigin(t *testing.T) {
 }
 
 func TestCORS_DisallowedOrigin(t *testing.T) {
-	os.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080")
-	defer os.Unsetenv("CORS_ALLOWED_ORIGINS")
+	_ = os.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:8080")
+	defer func() { _ = os.Unsetenv("CORS_ALLOWED_ORIGINS") }()
 
 	r := gin.New()
 	r.Use(CORS())
@@ -67,7 +67,7 @@ func TestCORS_DisallowedOrigin(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/test", nil)
+	req, _ := http.NewRequest("GET", "/test", http.NoBody)
 	req.Header.Set("Origin", "http://evil.com")
 	r.ServeHTTP(w, req)
 
@@ -77,7 +77,7 @@ func TestCORS_DisallowedOrigin(t *testing.T) {
 }
 
 func TestCORS_DefaultOrigin(t *testing.T) {
-	os.Unsetenv("CORS_ALLOWED_ORIGINS")
+	_ = os.Unsetenv("CORS_ALLOWED_ORIGINS")
 
 	r := gin.New()
 	r.Use(CORS())
@@ -86,7 +86,7 @@ func TestCORS_DefaultOrigin(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/test", nil)
+	req, _ := http.NewRequest("GET", "/test", http.NoBody)
 	req.Header.Set("Origin", "http://localhost:8080")
 	r.ServeHTTP(w, req)
 

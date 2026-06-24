@@ -97,7 +97,7 @@ func TestListQueryParams(t *testing.T) {
 				}
 			})
 			w := httptest.NewRecorder()
-			req, _ := http.NewRequest("GET", "/test?"+tt.query, nil)
+			req, _ := http.NewRequest("GET", "/test?"+tt.query, http.NoBody)
 			r.ServeHTTP(w, req)
 		})
 	}
