@@ -1,4 +1,4 @@
-.PHONY: build run db stop clean demo logs antifraud antifraud-build help lint test
+.PHONY: build run db stop clean demo logs antifraud antifraud-build help lint test test-race coverage vet tidy migrate
 
 APP_NAME := server
 MAIN := ./cmd/server
@@ -18,6 +18,10 @@ help:
 	@echo "    make run             — собрать и запустить сервер"
 	@echo "    make lint            — запустить линтер"
 	@echo "    make test            — запустить тесты"
+	@echo "    make test-race       — тесты с race detector"
+	@echo "    make coverage        — покрытие тестов"
+	@echo "    make vet             — static analysis"
+	@echo "    make tidy            — go mod tidy"
 	@echo ""
 	@echo "  Anti-Fraud:"
 	@echo "    make antifraud-build — собрать C++ движок"
@@ -52,6 +56,20 @@ lint:
 test:
 	go test -v ./...
 
+test-race:
+	go test -race ./...
+
+coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out
+	@echo "Coverage report: coverage.out"
+
+vet:
+	go vet ./...
+
+tidy:
+	go mod tidy
+
 antifraud-build:
 	$(MAKE) -C antifraud/cpp
 
@@ -68,4 +86,5 @@ logs:
 
 clean:
 	rm -f $(APP_NAME)
+	rm -f coverage.out
 	$(MAKE) -C antifraud/cpp clean

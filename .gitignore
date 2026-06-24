@@ -7,18 +7,17 @@
 /server
 /fraud_engine
 
-# Test binary
+# Test
 *.test
-
-# Output
 *.out
 *.prof
+coverage.out
 
 # Go workspace
 go.work
 go.work.sum
 
-# Dependency
+# Dependencies
 vendor/
 
 # Environment
@@ -50,6 +49,8 @@ tmp/
 # Build artifacts
 antifraud/cpp/fraud_engine
 
-# AI assistants
+# AI tools
 omo/
 .mimo/
+.mimocode/
+.codegraph/
