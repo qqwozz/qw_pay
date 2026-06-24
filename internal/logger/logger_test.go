@@ -37,10 +37,15 @@ func TestInfo(t *testing.T) {
 	Info("info test", "foo", "bar")
 
 	var entry map[string]interface{}
-	json.Unmarshal(buf.Bytes(), &entry)
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("failed to unmarshal log entry: %v", err)
+	}
 
-	if entry["level"] != "INFO" {
-		t.Errorf("expected level INFO, got %v", entry["level"])
+	if entry["msg"] != "info test" {
+		t.Errorf("expected msg 'info test', got %v", entry["msg"])
+	}
+	if entry["foo"] != "bar" {
+		t.Errorf("expected foo 'bar', got %v", entry["foo"])
 	}
 }
 
@@ -51,7 +56,9 @@ func TestError(t *testing.T) {
 	Error("error test", "reason", "fail")
 
 	var entry map[string]interface{}
-	json.Unmarshal(buf.Bytes(), &entry)
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("failed to unmarshal log entry: %v", err)
+	}
 
 	if entry["level"] != "ERROR" {
 		t.Errorf("expected level ERROR, got %v", entry["level"])
@@ -65,7 +72,9 @@ func TestWarn(t *testing.T) {
 	Warn("warn test", "detail", "something")
 
 	var entry map[string]interface{}
-	json.Unmarshal(buf.Bytes(), &entry)
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("failed to unmarshal log entry: %v", err)
+	}
 
 	if entry["level"] != "WARN" {
 		t.Errorf("expected level WARN, got %v", entry["level"])
@@ -84,7 +93,9 @@ func TestDebug(t *testing.T) {
 	Debug("debug test", "x", 1)
 
 	var entry map[string]interface{}
-	json.Unmarshal(buf.Bytes(), &entry)
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("failed to unmarshal log entry: %v", err)
+	}
 
 	if entry["level"] != "DEBUG" {
 		t.Errorf("expected level DEBUG, got %v", entry["level"])

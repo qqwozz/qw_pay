@@ -39,7 +39,7 @@ func NewProvider() *Provider {
 }
 
 type frankfurterResponse struct {
-	Base  string            `json:"base"`
+	Base  string             `json:"base"`
 	Rates map[string]float64 `json:"rates"`
 }
 
@@ -79,7 +79,7 @@ func (p *Provider) GetRate(ctx context.Context, from, to string) (decimal.Decima
 func (p *Provider) fetchRates(ctx context.Context, base string) (map[string]decimal.Decimal, error) {
 	url := fmt.Sprintf("%s/latest?base=%s", p.baseURL, base)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -88,7 +88,7 @@ func (p *Provider) fetchRates(ctx context.Context, base string) (map[string]deci
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)

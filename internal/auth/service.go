@@ -23,10 +23,10 @@ type otpEntry struct {
 }
 
 type Service struct {
-	repo  *UserRepository
-	mu    sync.RWMutex
-	otp   map[string]*otpEntry
-	ctx   context.Context
+	repo   *UserRepository
+	mu     sync.RWMutex
+	otp    map[string]*otpEntry
+	ctx    context.Context
 	cancel context.CancelFunc
 }
 

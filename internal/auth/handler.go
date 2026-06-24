@@ -10,7 +10,7 @@ import (
 )
 
 type Handler struct {
-	svc       *Service
+	svc        *Service
 	refreshSvc *RefreshTokenService
 }
 

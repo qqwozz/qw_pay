@@ -42,9 +42,9 @@ type exchangeReader interface {
 }
 
 type Service struct {
-	db      *pgxpool.Pool
-	repo    txRepository
-	acc     accountReader
+	db       *pgxpool.Pool
+	repo     txRepository
+	acc      accountReader
 	exchange exchangeReader
 }
 
@@ -97,8 +97,8 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount dec
 
 	creditAmount := amount
 	if sourceCurrency != targetCurrency {
-		rate, err := s.exchange.GetRateWithFallback(ctx, sourceCurrency, targetCurrency, fallbackRates)
-		if err != nil {
+		rate, rateErr := s.exchange.GetRateWithFallback(ctx, sourceCurrency, targetCurrency, fallbackRates)
+		if rateErr != nil {
 			return nil, apperr.BadRequest(fmt.Sprintf("no exchange rate for %s to %s", sourceCurrency, targetCurrency))
 		}
 		exchangeRate = &rate

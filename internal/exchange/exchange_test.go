@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +15,6 @@ import (
 
 func init() {
 	logger.Setup(&bytes.Buffer{})
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)))
 }
 
 func TestGetRate_SameCurrency(t *testing.T) {
@@ -40,7 +38,7 @@ func TestGetRate_Success(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -68,7 +66,7 @@ func TestGetRate_MissingCurrency(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -113,7 +111,7 @@ func TestGetRate_Cached(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -123,9 +121,9 @@ func TestGetRate_Cached(t *testing.T) {
 		baseURL: server.URL,
 	}
 
-	p.GetRate(context.Background(), "USD", "EUR")
-	p.GetRate(context.Background(), "USD", "EUR")
-	p.GetRate(context.Background(), "USD", "EUR")
+	_, _ = p.GetRate(context.Background(), "USD", "EUR")
+	_, _ = p.GetRate(context.Background(), "USD", "EUR")
+	_, _ = p.GetRate(context.Background(), "USD", "EUR")
 
 	if callCount != 1 {
 		t.Errorf("expected 1 HTTP call (cached), got %d", callCount)
