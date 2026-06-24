@@ -2,7 +2,7 @@
 
 ## Требования
 
-- Go 1.22+
+- Go 1.23+
 - PostgreSQL 16+ (или Docker)
 - Redis 7+ (для антифрода)
 - g++ и libhiredis-dev (для C++ движка)
@@ -85,6 +85,7 @@ make db
 
 ```bash
 psql postgres://postgres:postgres@localhost:5432/qw_pay < migrations/001_init.sql
+psql postgres://postgres:postgres@localhost:5432/qw_pay < migrations/002_refresh_tokens.sql
 ```
 
 ---
@@ -110,7 +111,6 @@ make antifraud
 ### Docker (всё вместе)
 
 ```bash
-cd deploy
 docker-compose up -d
 ```
 
@@ -280,7 +280,7 @@ make antifraud-build
 
 ```bash
 # Запустить
-python3 antifraud/python/service.py
+python3 antifraud/orchestrator.py
 ```
 
 ### Оркестратор (оба движка)

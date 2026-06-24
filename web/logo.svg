@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" fill="none">
+  <!-- Background -->
+  <rect width="400" height="120" rx="16" fill="#0f172a"/>
+  
+  <!-- Q letter -->
+  <g transform="translate(20, 20)">
+    <circle cx="35" cy="35" r="28" stroke="#3b82f6" stroke-width="6" fill="none"/>
+    <circle cx="35" cy="35" r="18" fill="#3b82f6"/>
+    <line x1="50" y1="50" x2="65" y2="70" stroke="#3b82f6" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  
+  <!-- W letter -->
+  <g transform="translate(90, 20)">
+    <path d="M5 5 L20 70 L40 30 L60 70 L75 5" stroke="#22c55e" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Pay text -->
+  <text x="190" y="65" font-family="system-ui, -apple-system, sans-serif" font-size="48" font-weight="700" fill="#f8fafc" letter-spacing="-1">
+    Pay
+  </text>
+  
+  <!-- Accent line -->
+  <line x1="20" y1="95" x2="380" y2="95" stroke="url(#gradient)" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Gradient definition -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+</svg>

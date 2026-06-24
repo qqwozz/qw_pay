@@ -1,4 +1,4 @@
-# API Documentation
+# Документация API
 
 ## Базовый URL
 
@@ -31,7 +31,7 @@ Authorization: Bearer <token>
 }
 ```
 
-**Response (200):**
+**Response (201):**
 ```json
 {
   "message": "Registration successful. Check logs for OTP code.",
@@ -84,6 +84,7 @@ Authorization: Bearer <token>
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
   "token_type": "bearer",
   "user_id": "550e8400-e29b-41d4-a716-446655440000"
 }
@@ -110,13 +111,13 @@ Authorization: Bearer <token>
 }
 ```
 
-**Response (200):**
+**Response (201):**
 ```json
 {
   "id": "660e8400-e29b-41d4-a716-446655440001",
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
   "currency": "USD",
-  "balance": 100.0,
+  "balance": "100.00",
   "version": 1,
   "status": "ACTIVE",
   "created_at": "2024-01-15T10:30:00Z",
@@ -139,7 +140,7 @@ Authorization: Bearer <token>
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "currency": "USD",
-    "balance": 100.0,
+    "balance": "100.00",
     "version": 1,
     "status": "ACTIVE",
     "created_at": "2024-01-15T10:30:00Z",
@@ -185,14 +186,14 @@ Authorization: Bearer <token>
 }
 ```
 
-**Response (200):**
+**Response (201):**
 ```json
 {
   "id": "770e8400-e29b-41d4-a716-446655440003",
   "idempotency_key": "unique-key-123",
   "from_account_id": "660e8400-e29b-41d4-a716-446655440001",
   "to_account_id": "660e8400-e29b-41d4-a716-446655440002",
-  "amount": 50.0,
+  "amount": "50.00",
   "currency": "USD",
   "status": "EXECUTED",
   "created_at": "2024-01-15T10:35:00Z"
