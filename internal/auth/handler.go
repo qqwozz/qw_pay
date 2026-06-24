@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/qw_pay/internal/logger"
 	"github.com/qw_pay/internal/response"
 )
 
@@ -46,6 +47,7 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	otp := h.svc.GenerateOTP()
 	h.svc.StoreOTP(req.Email, otp)
+	logger.Info("OTP generated", "email", req.Email, "otp", otp)
 	response.Created(c, gin.H{
 		"message": "Registration successful. Check logs for OTP code.",
 		"user_id": user.ID,

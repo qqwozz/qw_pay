@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/qw_pay/internal/logger"
 )
 
 type Verdict struct {
@@ -60,7 +61,7 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 	}
 
 	if err := c.rdb.LPush(ctx, "antifraud:queue:python", data).Err(); err != nil {
-		slog.Warn("failed to push to python queue", "error", err)
+		logger.Warn("failed to push to python queue", "error", err)
 	}
 
 	key := fmt.Sprintf("antifraud:verdict:%s", req.ID)
@@ -73,7 +74,7 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 		case <-ctx.Done():
 			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		case <-deadline:
-			slog.Warn("antifraud timeout, defaulting to approved", "request_id", req.ID)
+			logger.Warn("antifraud timeout, defaulting to approved", "request_id", req.ID)
 			return &Verdict{
 				ID:        req.ID,
 				Approved:  true,
@@ -90,7 +91,7 @@ func (c *Client) Check(ctx context.Context, fromAccount, toAccount string, amoun
 			if err := json.Unmarshal([]byte(val), &verdict); err != nil {
 				continue
 			}
-			slog.Info("antifraud verdict received",
+			logger.Info("antifraud verdict received",
 				"id", verdict.ID,
 				"approved", verdict.Approved,
 				"risk", verdict.RiskScore,

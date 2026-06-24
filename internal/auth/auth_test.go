@@ -131,6 +131,13 @@ func TestStoreAndVerifyOTP(t *testing.T) {
 			t.Error("non-existent email should fail")
 		}
 	})
+
+	t.Run("similar OTP fails", func(t *testing.T) {
+		svc.StoreOTP("test4@example.com", "123456")
+		if svc.VerifyOTP("test4@example.com", "123457") {
+			t.Error("similar OTP should fail")
+		}
+	})
 }
 
 func TestCreateToken(t *testing.T) {
@@ -175,6 +182,13 @@ func TestDecodeToken(t *testing.T) {
 		_, err := svc.DecodeToken("")
 		if err == nil {
 			t.Error("expected error for empty token")
+		}
+	})
+
+	t.Run("wrong signing method rejected", func(t *testing.T) {
+		_, err := svc.DecodeToken("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.invalid")
+		if err == nil {
+			t.Error("expected error for wrong signing method")
 		}
 	})
 }

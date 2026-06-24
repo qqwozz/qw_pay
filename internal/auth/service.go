@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"fmt"
 	"math/big"
 	"sync"
@@ -109,7 +110,7 @@ func (s *Service) VerifyOTP(email, code string) bool {
 		delete(s.otp, email)
 		return false
 	}
-	if entry.code != code {
+	if subtle.ConstantTimeCompare([]byte(entry.code), []byte(code)) != 1 {
 		return false
 	}
 	delete(s.otp, email)
@@ -149,6 +150,9 @@ func (s *Service) CreateToken(userID uuid.UUID) (string, error) {
 
 func (s *Service) DecodeToken(tokenStr string) (uuid.UUID, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
 		return []byte(config.C.JWTSecret), nil
 	})
 	if err != nil || !token.Valid {

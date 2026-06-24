@@ -3,6 +3,7 @@ package logger
 import (
 	"io"
 	"log/slog"
+	"os"
 )
 
 var L *slog.Logger
@@ -12,6 +13,12 @@ func Setup(output io.Writer) {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(L)
+}
+
+func init() {
+	if L == nil {
+		Setup(os.Stdout)
+	}
 }
 
 func Info(msg string, args ...any) {

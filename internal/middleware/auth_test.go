@@ -110,4 +110,17 @@ func TestAuthRequired(t *testing.T) {
 			t.Errorf("expected 401, got %d", w.Code)
 		}
 	})
+
+	t.Run("wrong signing method rejected", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/", http.NoBody)
+		c.Request.Header.Set("Authorization", "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.invalid")
+
+		AuthRequired()(c)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for wrong signing method, got %d", w.Code)
+		}
+	})
 }

@@ -30,14 +30,14 @@ help:
 	@echo ""
 
 db:
-	docker-compose up -d db redis
+	docker compose up -d db redis
 	@echo "Waiting for services..."
 	@sleep 3
 	@echo "PostgreSQL: localhost:5432"
 	@echo "Redis:      localhost:6379"
 
 stop:
-	docker-compose down
+	docker compose down
 
 build:
 	CGO_ENABLED=0 go build -o $(APP_NAME) $(MAIN)

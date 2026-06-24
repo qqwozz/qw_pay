@@ -1,7 +1,6 @@
 package transaction
 
 import (
-	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/qw_pay/internal/account"
 	"github.com/qw_pay/internal/antifraud"
 	"github.com/qw_pay/internal/contextkeys"
+	"github.com/qw_pay/internal/logger"
 	"github.com/qw_pay/internal/response"
 )
 
@@ -66,9 +66,9 @@ func (h *Handler) Create(c *gin.Context) {
 		)
 		switch {
 		case err != nil:
-			slog.Warn("antifraud check failed, proceeding", "error", err)
+			logger.Warn("antifraud check failed, proceeding", "error", err)
 		case !verdict.Approved:
-			slog.Warn("transaction blocked",
+			logger.Warn("transaction blocked",
 				"verdict_id", verdict.ID,
 				"reason", verdict.Reason,
 				"risk", verdict.RiskScore,
@@ -76,7 +76,7 @@ func (h *Handler) Create(c *gin.Context) {
 			response.Error(c, http.StatusForbidden, "Transaction blocked by anti-fraud system")
 			return
 		default:
-			slog.Info("transaction approved",
+			logger.Info("transaction approved",
 				"verdict_id", verdict.ID,
 				"risk", verdict.RiskScore,
 				"engine", verdict.Engine,

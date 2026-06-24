@@ -18,6 +18,7 @@ import (
 	"github.com/qw_pay/internal/auth"
 	"github.com/qw_pay/internal/config"
 	"github.com/qw_pay/internal/database"
+	"github.com/qw_pay/internal/exchange"
 	"github.com/qw_pay/internal/logger"
 	"github.com/qw_pay/internal/middleware"
 	"github.com/qw_pay/internal/ratelimit"
@@ -64,11 +65,14 @@ func main() {
 	accountRepo := account.NewRepository(database.Pool)
 	txRepo := transaction.NewRepository(database.Pool)
 	refreshTokenRepo := auth.NewRefreshTokenRepository(database.Pool)
+	exchangeProvider := exchange.NewProvider()
 
 	authSvc := auth.NewService(userRepo)
 	accountSvc := account.NewService(accountRepo)
-	txSvc := transaction.NewService(database.Pool, txRepo, accountSvc)
+	txSvc := transaction.NewService(database.Pool, txRepo, accountSvc, exchangeProvider)
 	refreshTokenSvc := auth.NewRefreshTokenService(refreshTokenRepo)
+
+	defer authSvc.Stop()
 
 	authH := auth.NewHandler(authSvc, refreshTokenSvc)
 	accountH := account.NewHandler(accountSvc)

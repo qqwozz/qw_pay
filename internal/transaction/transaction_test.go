@@ -31,7 +31,7 @@ func TestExchangeRates(t *testing.T) {
 	}
 
 	for key, expectedRate := range expected {
-		if rate, ok := exchangeRates[key]; !ok {
+		if rate, ok := fallbackRates[key]; !ok {
 			t.Errorf("missing exchange rate for %s", key)
 		} else if !rate.Equal(expectedRate) {
 			t.Errorf("exchange rate %s: expected %s, got %s", key, expectedRate, rate)
@@ -41,8 +41,8 @@ func TestExchangeRates(t *testing.T) {
 
 func TestExchangeRateKeys(t *testing.T) {
 	rates := []string{"RUB_USD", "USD_RUB", "RUB_EUR", "EUR_RUB", "USD_EUR", "EUR_USD"}
-	if len(exchangeRates) != len(rates) {
-		t.Errorf("expected %d rates, got %d", len(rates), len(exchangeRates))
+	if len(fallbackRates) != len(rates) {
+		t.Errorf("expected %d rates, got %d", len(rates), len(fallbackRates))
 	}
 }
 
@@ -55,7 +55,7 @@ func TestNewRepository(t *testing.T) {
 
 func TestNewService(t *testing.T) {
 	repo := &Repository{db: nil}
-	svc := NewService(nil, repo, nil)
+	svc := NewService(nil, repo, nil, nil)
 	if svc == nil {
 		t.Fatal("service should not be nil")
 	}
@@ -109,6 +109,18 @@ func (m *mockTxRepo) ListByUser(ctx context.Context, userID uuid.UUID, offset, l
 	return nil, 0, nil
 }
 
+type mockExchange struct {
+	rate decimal.Decimal
+	err  error
+}
+
+func (m *mockExchange) GetRateWithFallback(ctx context.Context, from, to string, fallback map[string]decimal.Decimal) (decimal.Decimal, error) {
+	if m.err != nil {
+		return decimal.Zero, m.err
+	}
+	return m.rate, nil
+}
+
 func TestService_Create_SourceNotFound(t *testing.T) {
 	fromID := uuid.New()
 	toID := uuid.New()
@@ -118,7 +130,7 @@ func TestService_Create_SourceNotFound(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key4")
 	if err == nil {
 		t.Error("expected error for unknown source account")
@@ -136,7 +148,7 @@ func TestService_Create_TargetNotFound(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key5")
 	if err == nil {
 		t.Error("expected error for unknown target account")
@@ -153,7 +165,7 @@ func TestService_Create_SameAccount(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, fromID, decimal.NewFromInt(100), "key3")
 	if err == nil {
 		t.Error("expected error for same account transfer")
@@ -172,7 +184,7 @@ func TestService_Create_BlockedAccount(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-blocked")
 	if err == nil {
 		t.Error("expected error for blocked source account")
@@ -191,7 +203,7 @@ func TestService_Create_BlockedTargetAccount(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-blocked2")
 	if err == nil {
 		t.Error("expected error for blocked target account")
@@ -210,7 +222,7 @@ func TestService_Create_MaxAmount(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(20_000_000), "key-max")
 	if err == nil {
 		t.Error("expected error for amount exceeding max transfer limit")
@@ -229,7 +241,7 @@ func TestService_Create_DailyLimit(t *testing.T) {
 		dailySum: decimal.RequireFromString("49999999"),
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(10), "key-daily")
 	if err == nil {
 		t.Error("expected error for daily limit exceeded")
@@ -248,7 +260,8 @@ func TestService_Create_NoExchangeRate(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	mockExchange := &mockExchange{err: errors.ErrNotFound}
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, mockExchange)
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-rate")
 	if err == nil {
 		t.Error("expected error for missing exchange rate")
@@ -267,7 +280,7 @@ func TestService_Create_ZeroAmount(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.Zero, "key-zero")
 	if err == nil {
 		t.Error("expected error for zero amount")
@@ -286,15 +299,34 @@ func TestService_Create_NegativeAmount(t *testing.T) {
 		dailySum: decimal.Zero,
 	}
 
-	svc := NewService(nil, &mockTxRepo{}, mockAcc)
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
 	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(-10), "key-neg")
 	if err == nil {
 		t.Error("expected error for negative amount")
 	}
 }
 
+func TestService_Create_InsufficientFunds(t *testing.T) {
+	fromID := uuid.New()
+	toID := uuid.New()
+
+	mockAcc := &mockAccountService{
+		accounts: map[uuid.UUID]*mockAccount{
+			fromID: {account: &model.Account{ID: fromID, Status: model.StatusActive, Currency: model.CurrencyRUB, Balance: decimal.NewFromInt(50)}},
+			toID:   {account: &model.Account{ID: toID, Status: model.StatusActive, Currency: model.CurrencyRUB}},
+		},
+		dailySum: decimal.Zero,
+	}
+
+	svc := NewService(nil, &mockTxRepo{}, mockAcc, &mockExchange{rate: decimal.NewFromInt(1)})
+	_, err := svc.Create(context.Background(), fromID, toID, decimal.NewFromInt(100), "key-funds")
+	if err == nil {
+		t.Error("expected error for insufficient funds")
+	}
+}
+
 func TestService_ListByUser_PaginationDefaults(t *testing.T) {
-	svc := NewService(nil, &mockTxRepo{}, nil)
+	svc := NewService(nil, &mockTxRepo{}, nil, nil)
 
 	t.Run("page 0 defaults to 1", func(t *testing.T) {
 		_, _, err := svc.ListByUser(context.Background(), uuid.New(), 0, 20)

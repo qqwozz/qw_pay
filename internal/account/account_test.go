@@ -57,7 +57,7 @@ func TestAccountJSON(t *testing.T) {
 		ID:        uuid.New(),
 		UserID:    uuid.New(),
 		Currency:  model.CurrencyUSD,
-		Balance:   decimal.NewFromFloat(1000.00),
+		Balance:   decimal.RequireFromString("1000.00"),
 		Version:   5,
 		Status:    model.StatusActive,
 		CreatedAt: time.Now(),
@@ -67,7 +67,7 @@ func TestAccountJSON(t *testing.T) {
 	if acc.Currency != model.CurrencyUSD {
 		t.Error("currency should be USD")
 	}
-	if !acc.Balance.Equal(decimal.NewFromFloat(1000.00)) {
+	if !acc.Balance.Equal(decimal.RequireFromString("1000.00")) {
 		t.Error("balance should be 1000.00")
 	}
 	if acc.Version != 5 {
@@ -88,12 +88,12 @@ func TestMockAccountReader(t *testing.T) {
 				ID:       accID,
 				UserID:   userID,
 				Currency: model.CurrencyUSD,
-				Balance:  decimal.NewFromFloat(500.0),
+				Balance:  decimal.RequireFromString("500.0"),
 				Version:  1,
 				Status:   model.StatusActive,
 			},
 		},
-		dailySum: decimal.NewFromFloat(100.0),
+		dailySum: decimal.RequireFromString("100.0"),
 	}
 
 	t.Run("GetByID found", func(t *testing.T) {
@@ -118,7 +118,7 @@ func TestMockAccountReader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !sum.Equal(decimal.NewFromFloat(100.0)) {
+		if !sum.Equal(decimal.RequireFromString("100.0")) {
 			t.Errorf("expected 100.0, got %s", sum)
 		}
 	})

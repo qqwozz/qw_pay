@@ -3,7 +3,6 @@ package transaction
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,10 +11,11 @@ import (
 
 	"github.com/qw_pay/internal/config"
 	apperr "github.com/qw_pay/internal/errors"
+	"github.com/qw_pay/internal/logger"
 	"github.com/qw_pay/internal/model"
 )
 
-var exchangeRates = map[string]decimal.Decimal{
+var fallbackRates = map[string]decimal.Decimal{
 	"RUB_USD": decimal.RequireFromString("0.011"),
 	"USD_RUB": decimal.RequireFromString("90.91"),
 	"RUB_EUR": decimal.RequireFromString("0.010"),
@@ -37,14 +37,19 @@ type txRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID, offset, limit int) ([]model.Transaction, int, error)
 }
 
-type Service struct {
-	db   *pgxpool.Pool
-	repo txRepository
-	acc  accountReader
+type exchangeReader interface {
+	GetRateWithFallback(ctx context.Context, from, to string, fallback map[string]decimal.Decimal) (decimal.Decimal, error)
 }
 
-func NewService(db *pgxpool.Pool, repo txRepository, acc accountReader) *Service {
-	return &Service{db: db, repo: repo, acc: acc}
+type Service struct {
+	db      *pgxpool.Pool
+	repo    txRepository
+	acc     accountReader
+	exchange exchangeReader
+}
+
+func NewService(db *pgxpool.Pool, repo txRepository, acc accountReader, exchange exchangeReader) *Service {
+	return &Service{db: db, repo: repo, acc: acc, exchange: exchange}
 }
 
 func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount decimal.Decimal, idempotencyKey string) (*model.Transaction, error) {
@@ -74,6 +79,9 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount dec
 	if fromID == toID {
 		return nil, apperr.BadRequest("cannot transfer to the same account")
 	}
+	if from.Balance.LessThan(amount) {
+		return nil, apperr.BadRequest("insufficient funds")
+	}
 
 	dailySum, err := s.acc.GetDailyTransferSum(ctx, fromID)
 	if err != nil {
@@ -89,9 +97,8 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount dec
 
 	creditAmount := amount
 	if sourceCurrency != targetCurrency {
-		key := sourceCurrency + "_" + targetCurrency
-		rate, ok := exchangeRates[key]
-		if !ok {
+		rate, err := s.exchange.GetRateWithFallback(ctx, sourceCurrency, targetCurrency, fallbackRates)
+		if err != nil {
 			return nil, apperr.BadRequest(fmt.Sprintf("no exchange rate for %s to %s", sourceCurrency, targetCurrency))
 		}
 		exchangeRate = &rate
@@ -121,7 +128,7 @@ func (s *Service) Create(ctx context.Context, fromID, toID uuid.UUID, amount dec
 		return nil, apperr.Wrap(err, "failed to commit transaction")
 	}
 
-	slog.Info("transaction executed",
+	logger.Info("transaction executed",
 		"id", transaction.ID,
 		"from", fromID,
 		"to", toID,

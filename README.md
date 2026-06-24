@@ -20,7 +20,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-Passing-22c55e?style=for-the-badge)](#)
-[![Coverage](https://img.shields.io/badge/Coverage-85%25-brightgreen?style=for-the-badge)](#)
+[![Coverage](https://img.shields.io/badge/Coverage-25%25-yellow?style=for-the-badge)](#)
 
 <br/>
 
@@ -62,7 +62,7 @@
 
 - ACID-транзакции
 - Идемпотентность
-- Конвертация по курсам
+- Конвертация по реальным курсам (Frankfurter API)
 - Пагинация
 
 </td>
@@ -239,6 +239,7 @@ qw_pay/
 │   ├── contextkeys/                 # 📌 Ключи для gin.Context
 │   ├── database/                    # 🐘 PostgreSQL пул соединений
 │   ├── errors/                      # ❌ Типизированные ошибки
+│   ├── exchange/                    # 💱 Реальные курсы валют (Frankfurter API)
 │   ├── logger/                      # 📝 Structured logging (slog)
 │   ├── middleware/                   # 🛡️ AuthRequired, RequestID, CORS
 │   ├── model/                       # 📦 Модели данных
@@ -357,41 +358,13 @@ go tool cover -html=coverage.out
 
 ## Курсы валют
 
-<table>
-<tr>
-<th>From</th><th>To</th><th>Rate</th>
-</tr>
-<tr>
-<td><img src="https://img.shields.io/badge/RUB-grey?style=flat-square" alt="RUB"></td>
-<td><img src="https://img.shields.io/badge/USD-4169E1?style=flat-square&logo=usd&logoColor=white" alt="USD"></td>
-<td><b>0.011</b></td>
-</tr>
-<tr>
-<td><img src="https://img.shields.io/badge/USD-4169E1?style=flat-square&logo=usd&logoColor=white" alt="USD"></td>
-<td><img src="https://img.shields.io/badge/RUB-grey?style=flat-square" alt="RUB"></td>
-<td><b>90.91</b></td>
-</tr>
-<tr>
-<td><img src="https://img.shields.io/badge/RUB-grey?style=flat-square" alt="RUB"></td>
-<td><img src="https://img.shields.io/badge/EUR-003399?style=flat-square&logo=eur&logoColor=white" alt="EUR"></td>
-<td><b>0.010</b></td>
-</tr>
-<tr>
-<td><img src="https://img.shields.io/badge/EUR-003399?style=flat-square&logo=eur&logoColor=white" alt="EUR"></td>
-<td><img src="https://img.shields.io/badge/RUB-grey?style=flat-square" alt="RUB"></td>
-<td><b>100.00</b></td>
-</tr>
-<tr>
-<td><img src="https://img.shields.io/badge/USD-4169E1?style=flat-square&logo=usd&logoColor=white" alt="USD"></td>
-<td><img src="https://img.shields.io/badge/EUR-003399?style=flat-square&logo=eur&logoColor=white" alt="EUR"></td>
-<td><b>0.92</b></td>
-</tr>
-<tr>
-<td><img src="https://img.shields.io/badge/EUR-003399?style=flat-square&logo=eur&logoColor=white" alt="EUR"></td>
-<td><img src="https://img.shields.io/badge/USD-4169E1?style=flat-square&logo=usd&logoColor=white" alt="USD"></td>
-<td><b>1.09</b></td>
-</tr>
-</table>
+Курсы загружаются в реальном времени из **Frankfurter API** (84 центральных банка, 200+ валют).
+
+API бесплатное, не требует регистрации и обновляется ежедневно.
+
+- Источник: [frankfurter.dev](https://frankfurter.dev/)
+- Кэширование: 1 час
+- Fallback: статические курсы при недоступности API
 
 ---
 

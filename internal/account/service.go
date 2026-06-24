@@ -2,11 +2,11 @@ package account
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/qw_pay/internal/logger"
 	"github.com/qw_pay/internal/model"
 )
 
@@ -25,7 +25,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, currency string)
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("account created", "id", acc.ID, "user", userID, "currency", currency, "bonus", WelcomeBonus)
+	logger.Info("account created", "id", acc.ID, "user", userID, "currency", currency, "bonus", WelcomeBonus)
 	return acc, nil
 }
 
